@@ -193,7 +193,7 @@ Add `?__cf_bypass_cache=1` to any URL to see debug headers:
 
 ## Support
 
-- 📖 [Documentation](docs/)
+- 📖 [Installation Guide](docs/installation.md)
 - 🐛 [Report Issues](https://github.com/Dilanti-Media/cloudflare-ab-testing/issues)
 - 💬 [Discussions](https://github.com/Dilanti-Media/cloudflare-ab-testing/discussions)
 
