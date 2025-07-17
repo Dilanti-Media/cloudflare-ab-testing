@@ -462,7 +462,9 @@ const STATIC_EXTENSIONS = new Set([
   'jpg', 'jpeg', 'png', 'gif', 'webp', 'css', 'js', 'ico', 'svg',
   'woff', 'woff2', 'ttf', 'eot', 'pdf', 'zip', 'mp4', 'mp3'
 ]);
-const STATIC_PATHS = ['/wp-content/uploads/', '/wp-includes/']; // '/wp-includes/' is included to ensure consistent handling of static assets, as it contains core WordPress files that are frequently accessed.
+// '/wp-includes/' is included to ensure consistent handling of static assets.
+// It contains core WordPress files that are frequently accessed.
+const STATIC_PATHS = ['/wp-content/uploads/', '/wp-includes/'];
 
 function isStaticAsset(pathname) {
   // Check paths first (faster than regex)
