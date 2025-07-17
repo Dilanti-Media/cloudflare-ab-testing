@@ -62,8 +62,12 @@ async function handleRequest(request, event) {
     debugInfo.pathname = pathname;
     debugInfo.searchParams = url.search;
 
-    // Handle admin bypass first
-    if (pathname.startsWith('/wp-admin/') || pathname.startsWith('/wp-login')) {
+    // Handle WordPress system paths bypass first
+    if (pathname.startsWith('/wp-admin/') || 
+        pathname.startsWith('/wp-login') || 
+        pathname.startsWith('/wp-json/') ||
+        pathname.startsWith('/wp-content/') ||
+        pathname.startsWith('/wp-includes/')) {
       return fetch(originalRequest);
     }
 
@@ -458,7 +462,7 @@ const STATIC_EXTENSIONS = new Set([
   'jpg', 'jpeg', 'png', 'gif', 'webp', 'css', 'js', 'ico', 'svg',
   'woff', 'woff2', 'ttf', 'eot', 'pdf', 'zip', 'mp4', 'mp3'
 ]);
-const STATIC_PATHS = ['/wp-content/uploads/', '/wp-includes/'];
+const STATIC_PATHS = ['/wp-content/uploads/'];
 
 function isStaticAsset(pathname) {
   // Check paths first (faster than regex)

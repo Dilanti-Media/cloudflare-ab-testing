@@ -17,7 +17,7 @@ const STATIC_EXTENSIONS = new Set([
   'pdf', 'zip', 'ico', 'xml', 'txt'
 ]);
 
-const BYPASS_PATHS = ['/wp-admin/', '/wp-json/', '/wp-login'];
+const BYPASS_PATHS = ['/wp-admin/', '/wp-json/', '/wp-login', '/wp-content/', '/wp-includes/'];
 
 // Check KV namespace binding once at module load
 let kvNamespaceAvailable = null;
@@ -67,7 +67,7 @@ async function handleRequest(request) {
   const now = Date.now();
   
   try {
-    // Skip processing for admin, API, or static files
+    // Skip processing for WordPress admin, REST API, system paths, or static files
     if (shouldBypassProcessing(url, request)) {
       return fetch(request);
     }
@@ -123,7 +123,7 @@ async function handleRequest(request) {
 function shouldBypassProcessing(url, request) {
   const path = url.pathname;
   
-  // Admin and API paths
+  // WordPress admin, REST API, and system paths
   if (BYPASS_PATHS.some(prefix => path.startsWith(prefix))) {
     return true;
   }
