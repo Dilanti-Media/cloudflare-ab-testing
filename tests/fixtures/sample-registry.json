@@ -1,0 +1,17 @@
+[
+  {
+    "test": "homepage_cta_test",
+    "paths": ["/", "/home"],
+    "cookieName": "AB_CTA_BUTTON_TEST"
+  },
+  {
+    "test": "pricing_page_test", 
+    "paths": ["/pricing", "/pricing/"],
+    "cookieName": "AB_PRICING_LAYOUT_TEST"
+  },
+  {
+    "test": "blog_header_test",
+    "paths": ["/blog", "/blog/", "/news"],
+    "cookieName": "AB_BLOG_HEADER_TEST"
+  }
+]
