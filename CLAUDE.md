@@ -36,8 +36,8 @@ The build script (`scripts/build-plugin.sh`) creates a distributable plugin zip 
 - Provides shortcodes for A/B testing display
 
 **Cloudflare Workers (`plugin/workers/`)**
-- `ab-simple-worker.js` - Basic A/B testing functionality
-- `ab-cache-worker.js` - Advanced version with multi-layer caching
+- `ab-testing.js` - Basic A/B testing functionality
+- `ab-testing-with-cache.js` - Advanced version with multi-layer caching
 - Both workers use KV storage for test configuration
 
 **Frontend JavaScript (`plugin/assets/js/cloudflare-ab-testing.js`)**
@@ -68,8 +68,8 @@ Tests are stored in Cloudflare KV as JSON:
 
 ### Worker Differences
 
-- **Simple Worker**: Basic A/B testing, lightweight, good for low-traffic sites
-- **Cache Worker**: Advanced caching with static asset optimization, production-ready
+- **Simple Worker** (`ab-testing.js`): Basic A/B testing, lightweight, good for low-traffic sites
+- **Cache Worker** (`ab-testing-with-cache.js`): Advanced caching with static asset optimization, production-ready
 
 ## File Structure
 
@@ -94,6 +94,11 @@ scripts/
 - Use Jest for JavaScript testing
 - Test fixtures available in `tests/fixtures/`
 - Plugin functions tested in `tests/unit/test-plugin-functions.php`
+
+### Test Site
+- **URL**: https://cloudflare-ab-testing.dilanti.media/
+- **Plugin Location**: `wordpress/wp-content/plugins/cloudflare-ab-testing/`
+- **Local WordPress**: Available in `wordpress/` directory for testing
 
 ## Requirements
 

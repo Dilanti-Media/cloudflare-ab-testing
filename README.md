@@ -35,7 +35,7 @@ A comprehensive WordPress plugin for A/B testing using Cloudflare Workers with a
 
 ## Worker Versions
 
-### Full Version (`ab-cache-worker.js`)
+### Full Version
 - ✅ Advanced multi-layer caching system
 - ✅ Static asset optimization
 - ✅ Request coalescing
@@ -43,7 +43,7 @@ A comprehensive WordPress plugin for A/B testing using Cloudflare Workers with a
 - ✅ Production-ready for high traffic
 - ✅ Performance monitoring
 
-### Simple Version (`ab-simple-worker.js`)
+### Simple Version
 - ✅ Basic A/B testing functionality
 - ✅ Lightweight and easy to understand
 - ✅ No complex caching features

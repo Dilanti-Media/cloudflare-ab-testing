@@ -643,7 +643,7 @@ function cloudflare_ab_ajax_test_credentials() {
 --------------------------------------------------*/
 
 function cloudflare_ab_get_worker_from_file($version = 'cache') {
-    $worker_file = ($version === 'simple') ? 'ab-simple-worker.js' : 'ab-cache-worker.js';
+    $worker_file = ($version === 'simple') ? 'ab-testing.js' : 'ab-testing-with-cache.js';
     $worker_path = plugin_dir_path(__FILE__) . 'workers/' . $worker_file;
     
     if (file_exists($worker_path)) {
@@ -927,7 +927,7 @@ function cloudflare_ab_deploy_worker( $worker_name, $zone_id, $namespace_id, $ve
     ];
     
     $bindings_response = wp_remote_request( $bindings_url, [
-        'method' => 'PUT',
+        'method' => 'PATCH',
         'headers' => [
             'Authorization' => 'Bearer ' . $cf_api_token,
             'Content-Type' => 'application/json',
