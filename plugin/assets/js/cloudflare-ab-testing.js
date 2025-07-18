@@ -58,6 +58,14 @@
             });
 
             console.log(`[DM A/B] Active test: '${entry.test}', Variant: '${variant}' on path: '${path}'`);
+            
+            // Add visual debug information for manual verification
+            console.log(`%c🧪 A/B Test Debug Info:`, 'color: #0073aa; font-weight: bold; font-size: 14px;');
+            console.log(`%c   Test ID: ${entry.test}`, 'color: #0073aa;');
+            console.log(`%c   Variant: ${variant}`, 'color: #0073aa; font-weight: bold;');
+            console.log(`%c   Cookie: ${entry.cookieName}=${variant}`, 'color: #0073aa;');
+            console.log(`%c   Path: ${path}`, 'color: #0073aa;');
+            console.log(`%c   Matched Paths: ${entry.paths.join(', ')}`, 'color: #0073aa;');
         });
     }
 
@@ -66,6 +74,58 @@
         document.addEventListener('DOMContentLoaded', initializeAbTests);
     } else {
         initializeAbTests();
+    }
+
+    // Add visual debug indicator in bottom right corner (only if admin or debug mode)
+    function addVisualDebugIndicator() {
+        const path = window.location.pathname;
+        const activeTests = registry.filter(entry => {
+            return entry.paths.some(prefix => {
+                if (path === prefix) return true;
+                const normalizedPrefix = prefix.endsWith('/') ? prefix : `${prefix}/`;
+                return path.startsWith(normalizedPrefix);
+            });
+        });
+
+        if (activeTests.length > 0) {
+            const debugDiv = document.createElement('div');
+            debugDiv.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                background: #0073aa;
+                color: white;
+                padding: 10px 15px;
+                border-radius: 5px;
+                font-family: monospace;
+                font-size: 12px;
+                z-index: 9999;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                cursor: pointer;
+                max-width: 200px;
+            `;
+            
+            const variants = activeTests.map(test => {
+                const variant = getCookieValue(test.cookieName) || 'A';
+                return `${test.test}: ${variant}`;
+            }).join('<br>');
+            
+            debugDiv.innerHTML = `🧪 A/B Tests<br>${variants}`;
+            debugDiv.title = 'Click to hide A/B test debug info';
+            
+            debugDiv.addEventListener('click', function() {
+                this.style.display = 'none';
+            });
+            
+            document.body.appendChild(debugDiv);
+        }
+    }
+
+    // Add visual indicator when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', addVisualDebugIndicator);
+    } else {
+        addVisualDebugIndicator();
     }
 
 })();

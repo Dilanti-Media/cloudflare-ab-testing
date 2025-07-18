@@ -164,6 +164,7 @@ function cloudflare_ab_deploy_worker( $worker_name, $zone_id, $namespace_id, $ve
     $upload_url = "https://api.cloudflare.com/client/v4/accounts/{$cf_account_id}/workers/scripts/{$worker_name}";
 
     $metadata = [
+        'main_module' => 'script.js',
         'bindings' => [
             [
                 'type' => 'kv_namespace',
@@ -171,7 +172,8 @@ function cloudflare_ab_deploy_worker( $worker_name, $zone_id, $namespace_id, $ve
                 'namespace_id' => $namespace_id
             ]
         ],
-        'main_module' => 'main.js'
+        'compatibility_date' => '2024-01-01',
+        'compatibility_flags' => []
     ];
 
     // Create multipart form data with proper field names
@@ -184,9 +186,9 @@ function cloudflare_ab_deploy_worker( $worker_name, $zone_id, $namespace_id, $ve
     $body .= "Content-Type: application/json\r\n\r\n";
     $body .= json_encode($metadata) . "\r\n";
 
-    // Add script part with field name matching main_module
+    // Add script part with field name matching main_module exactly
     $body .= "--{$boundary}\r\n";
-    $body .= "Content-Disposition: form-data; name=\"main.js\"; filename=\"main.js\"\r\n";
+    $body .= "Content-Disposition: form-data; name=\"script\"; filename=\"script.js\"\r\n";
     $body .= "Content-Type: application/javascript+module\r\n\r\n";
     $body .= $worker_script . "\r\n";
 
@@ -542,15 +544,26 @@ function cloudflare_ab_ajax_update_worker_code() {
         wp_send_json_error( "Failed to load {$worker_version} worker template" );
     }
     
-    // Debug: Check script length
+    // Debug: Check script length and content
     if ( strlen( $worker_script ) < 100 ) {
         wp_send_json_error( "Worker script appears to be too short or invalid (length: " . strlen( $worker_script ) . ")" );
     }
+    
+    // Debug: Check if script has proper export format (ES module or event listeners)
+    if ( strpos( $worker_script, 'export default' ) === false && strpos( $worker_script, 'addEventListener' ) === false ) {
+        wp_send_json_error( "Worker script missing export default or event listeners. Script preview: " . substr( $worker_script, 0, 200 ) . "..." );
+    }
+    
+    // Debug: Log first few lines to verify content
+    $script_lines = explode( "\n", $worker_script );
+    $first_lines = array_slice( $script_lines, 0, 5 );
+    error_log( "[DM A/B] Worker script first 5 lines: " . implode( " | ", $first_lines ) );
     
     // Update worker script with KV binding (same as deploy logic)
     $upload_url = "https://api.cloudflare.com/client/v4/accounts/{$cf_account_id}/workers/scripts/{$worker_id}";
     
     $metadata = [
+        'main_module' => 'script.js',
         'bindings' => [
             [
                 'type' => 'kv_namespace',
@@ -558,7 +571,8 @@ function cloudflare_ab_ajax_update_worker_code() {
                 'namespace_id' => $namespace_id
             ]
         ],
-        'main_module' => 'main.js'
+        'compatibility_date' => '2024-01-01',
+        'compatibility_flags' => []
     ];
     
     // Create multipart form data with proper field names
@@ -571,9 +585,9 @@ function cloudflare_ab_ajax_update_worker_code() {
     $body .= "Content-Type: application/json\r\n\r\n";
     $body .= json_encode($metadata) . "\r\n";
     
-    // Add script part with field name matching main_module
+    // Add script part with field name matching main_module exactly
     $body .= "--{$boundary}\r\n";
-    $body .= "Content-Disposition: form-data; name=\"main.js\"; filename=\"main.js\"\r\n";
+    $body .= "Content-Disposition: form-data; name=\"script\"; filename=\"script.js\"\r\n";
     $body .= "Content-Type: application/javascript+module\r\n\r\n";
     $body .= $worker_script . "\r\n";
     
@@ -624,12 +638,22 @@ function cloudflare_ab_get_worker_template( $version = 'cache' ) {
         $template_file = $plugin_dir . 'workers/ab-testing-with-cache.js';
     }
     
+    // Debug logging
+    error_log( '[DM A/B] Loading worker template: ' . $template_file );
+    error_log( '[DM A/B] Plugin dir: ' . $plugin_dir );
+    error_log( '[DM A/B] Version requested: ' . $version );
+    error_log( '[DM A/B] File exists: ' . (file_exists( $template_file ) ? 'YES' : 'NO') );
+    
     if ( ! file_exists( $template_file ) ) {
         error_log( '[DM A/B] Worker template file not found: ' . $template_file );
         return '';
     }
     
-    return file_get_contents( $template_file );
+    $content = file_get_contents( $template_file );
+    error_log( '[DM A/B] Template content length: ' . strlen( $content ) );
+    error_log( '[DM A/B] Template first 100 chars: ' . substr( $content, 0, 100 ) );
+    
+    return $content;
 }
 
 function cloudflare_ab_get_worker_status( $zone_id ) {

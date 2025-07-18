@@ -83,6 +83,11 @@ function cloudflare_ab_enqueue_assets() {
         ];
     }
     wp_localize_script( 'cloudflare-ab-testing-script', 'cloudflareAbTesting', [ 'registry' => $tests ] );
+    
+    // Add PHP debug output for logged-in users or when debug mode is enabled
+    if ( ( is_user_logged_in() && current_user_can( 'manage_options' ) ) || ( defined( 'WP_DEBUG' ) && WP_DEBUG ) ) {
+        cloudflare_ab_add_debug_output( $tests );
+    }
 
     // Enqueue basic inline styles for demo buttons
     $custom_css = ".ab-cta-button { padding: 10px 20px; background-color: #0073aa; color: #fff; border: none; font-size: 1em; cursor: pointer; } .ab-cta-button.variant-b { background-color: #00a0d2; }";
@@ -98,5 +103,52 @@ function cloudflare_ab_maybe_initialize_defaults() {
         // Set a default test for the homepage
         $default_config = "homepage_test|/";
         update_option( 'cloudflare_ab_enabled_urls', $default_config );
+    }
+}
+
+function cloudflare_ab_add_debug_output( $tests ) {
+    $current_path = wp_parse_url( $_SERVER['REQUEST_URI'], PHP_URL_PATH );
+    $active_tests = [];
+    
+    foreach ( $tests as $test ) {
+        if ( in_array( $current_path, $test['paths'], true ) ) {
+            $cookie_name = $test['cookieName'];
+            $variant = 'A'; // Default
+            
+            // Check for variant in various sources
+            if ( !empty( $_GET[$cookie_name] ) ) {
+                $variant = sanitize_key( $_GET[$cookie_name] );
+                $source = 'URL Parameter';
+            } elseif ( !empty( $_SERVER['HTTP_X_' . strtoupper($cookie_name)] ) ) {
+                $variant = sanitize_key( $_SERVER['HTTP_X_' . strtoupper($cookie_name)] );
+                $source = 'Worker Header';
+            } elseif ( !empty( $_COOKIE[$cookie_name] ) ) {
+                $variant = sanitize_key( $_COOKIE[$cookie_name] );
+                $source = 'Cookie';
+            } else {
+                $source = 'Default';
+            }
+            
+            $active_tests[] = [
+                'test' => $test['test'],
+                'variant' => $variant,
+                'source' => $source,
+                'cookie_name' => $cookie_name,
+                'path' => $current_path
+            ];
+        }
+    }
+    
+    if ( !empty( $active_tests ) ) {
+        add_action( 'wp_footer', function() use ( $active_tests ) {
+            echo "<!-- A/B Test Debug Info -->\n";
+            echo "<script>\n";
+            echo "console.log('%c🧪 PHP A/B Test Debug Info:', 'color: #d63638; font-weight: bold; font-size: 14px;');\n";
+            foreach ( $active_tests as $test ) {
+                echo "console.log('%c   PHP Test: {$test['test']} | Variant: {$test['variant']} | Source: {$test['source']}', 'color: #d63638;');\n";
+            }
+            echo "</script>\n";
+            echo "<!-- End A/B Test Debug -->\n";
+        } );
     }
 }

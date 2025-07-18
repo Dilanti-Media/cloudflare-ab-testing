@@ -1,6 +1,8 @@
-addEventListener('fetch', event => {
-  event.respondWith(handleRequest(event.request, event));
-});
+export default {
+  async fetch(request, env, ctx) {
+    return handleRequest(request, env, ctx);
+  }
+};
 
 const CONFIG = {
   TIMEOUT_MS: 30000,
@@ -49,9 +51,9 @@ if (!CONFIG.TIMEOUT_MS) {
 }
 
 // Check KV namespace availability once
-function checkKVNamespace() {
+function checkKVNamespace(env) {
   if (kvNamespaceAvailable === null) {
-    kvNamespaceAvailable = typeof AB_TESTS_KV !== 'undefined';
+    kvNamespaceAvailable = typeof env.AB_TESTS_KV !== 'undefined';
     if (!kvNamespaceAvailable) {
       logWarn('KV namespace not bound - A/B testing disabled');
     }
@@ -61,7 +63,7 @@ function checkKVNamespace() {
 
 logInfo('Simple A/B Testing Worker initialized');
 
-async function handleRequest(request) {
+async function handleRequest(request, env, ctx) {
   const url = new URL(request.url);
   const pathname = url.pathname;
   const now = Date.now();
@@ -79,7 +81,7 @@ async function handleRequest(request) {
     }
 
     // Get A/B test registry (cached)
-    const registry = await getTestRegistry();
+    const registry = await getTestRegistry(env);
     if (!registry || registry.length === 0) {
       return fetch(request);
     }
@@ -112,7 +114,7 @@ async function handleRequest(request) {
     }
 
     // Handle A/B test logic with timeout
-    return handleABTestWithTimeout(request, url, matchingTest);
+    return handleABTestWithTimeout(request, url, matchingTest, env);
     
   } catch (error) {
     logError('Worker error:', error);
@@ -158,7 +160,7 @@ function shouldBypassProcessing(url, request) {
   return false;
 }
 
-async function getTestRegistry() {
+async function getTestRegistry(env) {
   const now = Date.now();
   
   // Check in-memory cache first (fastest)
@@ -188,11 +190,11 @@ async function getTestRegistry() {
   
   try {
     // Check KV namespace availability once
-    if (!checkKVNamespace()) {
+    if (!checkKVNamespace(env)) {
       return [];
     }
     
-    const registry = await AB_TESTS_KV.get("registry", { type: "json" });
+    const registry = await env.AB_TESTS_KV.get("registry", { type: "json" });
     if (!registry || !Array.isArray(registry)) {
       logInfo('No valid registry found');
       // Cache empty result for shorter time to avoid hammering KV
@@ -243,7 +245,7 @@ function findMatchingTest(pathname, registry) {
   });
 }
 
-async function handleABTestWithTimeout(request, url, test) {
+async function handleABTestWithTimeout(request, url, test, env) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), CONFIG.TIMEOUT_MS);
   
