@@ -798,6 +798,9 @@ function cloudflare_ab_worker_management_page_markup() {
     $cf_account_id = $credentials['account_id'] ?? '';
     $cf_namespace_id = $credentials['namespace_id'] ?? '';
     $cf_api_token = $credentials['api_token'] ?? '';
+    
+    // Remember worker version selection
+    $selected_worker_version = get_option( 'cloudflare_ab_worker_version', 'simple' );
 
     $has_credentials = !empty($cf_account_id) && !empty($cf_api_token);
     $has_namespace = !empty($cf_namespace_id);
@@ -830,9 +833,9 @@ function cloudflare_ab_worker_management_page_markup() {
                         <tr>
                             <th scope="row">Worker Version</th>
                             <td>
-                                <select id="worker-version" class="regular-text">
-                                    <option value="cache">Full Version (with advanced caching)</option>
-                                    <option value="simple">Simple Version (lightweight)</option>
+                                <select id="worker-version" class="regular-text" name="cloudflare_ab_worker_version">
+                                    <option value="cache" <?php selected( $selected_worker_version, 'cache' ); ?>>Full Version (with advanced caching)</option>
+                                    <option value="simple" <?php selected( $selected_worker_version, 'simple' ); ?>>Simple Version (lightweight)</option>
                                 </select>
                                 <p class="description">
                                     <strong>Full Version:</strong> Advanced caching, static asset optimization, production-ready<br>

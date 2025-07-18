@@ -46,6 +46,8 @@ function cloudflare_ab_get_cookie_for_current_path() {
 }
 
 add_action( 'wp_enqueue_scripts', 'cloudflare_ab_enqueue_assets' );
+add_action( 'admin_enqueue_scripts', 'cloudflare_ab_enqueue_admin_assets' );
+add_action( 'wp_ajax_cloudflare_ab_save_worker_version', 'cloudflare_ab_save_worker_version' );
 function cloudflare_ab_enqueue_assets() {
     // Force no-caching headers for debugging
     if ( ! headers_sent() ) {
@@ -99,12 +101,72 @@ function cloudflare_ab_enqueue_assets() {
     wp_add_inline_style( 'dm-ab-inline-styles', $custom_css );
 }
 
+function cloudflare_ab_enqueue_admin_assets( $hook ) {
+    // Only load on our admin pages
+    if ( strpos( $hook, 'cloudflare-ab' ) === false ) {
+        return;
+    }
+    
+    // Enqueue admin CSS
+    wp_enqueue_style(
+        'cloudflare-ab-admin-styles',
+        CLOUDFLARE_AB_TESTING_URL . 'assets/css/admin-styles.css',
+        [],
+        CLOUDFLARE_AB_TESTING_VERSION
+    );
+    
+    // Enqueue admin JS
+    wp_enqueue_script(
+        'cloudflare-ab-admin-scripts',
+        CLOUDFLARE_AB_TESTING_URL . 'assets/js/admin-scripts.js',
+        [ 'jquery' ],
+        CLOUDFLARE_AB_TESTING_VERSION,
+        true
+    );
+    
+    // Localize script for AJAX
+    wp_localize_script( 'cloudflare-ab-admin-scripts', 'cloudflareAbAdmin', [
+        'nonce' => wp_create_nonce( 'cloudflare_ab_admin_nonce' ),
+        'ajaxurl' => admin_url( 'admin-ajax.php' ),
+        'strings' => [
+            'confirmDelete' => __( 'Are you sure you want to delete this? This action cannot be undone.', 'cloudflare-ab-testing' ),
+            'loading' => __( 'Loading...', 'cloudflare-ab-testing' ),
+            'error' => __( 'An error occurred. Please try again.', 'cloudflare-ab-testing' ),
+            'success' => __( 'Operation completed successfully.', 'cloudflare-ab-testing' )
+        ]
+    ] );
+}
+
+function cloudflare_ab_save_worker_version() {
+    // Verify nonce
+    if ( ! wp_verify_nonce( $_POST['nonce'], 'cloudflare_ab_admin_nonce' ) ) {
+        wp_die( 'Security check failed' );
+    }
+    
+    // Check permissions
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_die( 'Insufficient permissions' );
+    }
+    
+    $worker_version = sanitize_text_field( $_POST['worker_version'] );
+    
+    // Validate worker version
+    if ( ! in_array( $worker_version, ['simple', 'cache'] ) ) {
+        wp_send_json_error( 'Invalid worker version' );
+    }
+    
+    // Save the preference
+    update_option( 'cloudflare_ab_worker_version', $worker_version );
+    
+    wp_send_json_success( 'Worker version preference saved' );
+}
+
 add_action( 'admin_init', 'cloudflare_ab_maybe_initialize_defaults' );
 function cloudflare_ab_maybe_initialize_defaults() {
     // Only initialize if no configuration exists
     if ( empty( get_option( 'cloudflare_ab_enabled_urls', '' ) ) ) {
         // Set a default test for the homepage
-        $default_config = "homepage_test|/";
+        $default_config = "homepage_test|/,/home";
         update_option( 'cloudflare_ab_enabled_urls', $default_config );
     }
 }
