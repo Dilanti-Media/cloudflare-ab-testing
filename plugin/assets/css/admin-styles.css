@@ -1,0 +1,486 @@
+/**
+ * Cloudflare A/B Testing Plugin - Admin Styles
+ * Modern, clean admin interface styling
+ */
+
+/* =============================================================================
+   Main Admin Container
+   ============================================================================= */
+.cloudflare-ab-admin {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.cloudflare-ab-admin h1 {
+    color: #1e1e1e;
+    font-size: 2.5rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.cloudflare-ab-admin h1::before {
+    content: "📊";
+    font-size: 2rem;
+}
+
+/* =============================================================================
+   Status Cards
+   ============================================================================= */
+.ab-status-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.ab-status-card {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    transition: box-shadow 0.3s ease;
+}
+
+.ab-status-card:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.ab-status-card h3 {
+    margin: 0 0 15px 0;
+    color: #1e1e1e;
+    font-size: 1.2rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ab-status-card.success {
+    border-left: 4px solid #00a32a;
+}
+
+.ab-status-card.warning {
+    border-left: 4px solid #dba617;
+}
+
+.ab-status-card.error {
+    border-left: 4px solid #d63638;
+}
+
+.ab-status-card.info {
+    border-left: 4px solid #0073aa;
+}
+
+.ab-status-icon {
+    font-size: 1.5rem;
+}
+
+.ab-status-icon.success { color: #00a32a; }
+.ab-status-icon.warning { color: #dba617; }
+.ab-status-icon.error { color: #d63638; }
+.ab-status-icon.info { color: #0073aa; }
+
+/* =============================================================================
+   Modern Form Styling
+   ============================================================================= */
+.ab-form-section {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 25px;
+    margin-bottom: 25px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.ab-form-section h2 {
+    margin: 0 0 20px 0;
+    color: #1e1e1e;
+    font-size: 1.5rem;
+    font-weight: 600;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #f0f0f0;
+}
+
+.ab-form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.ab-form-field {
+    flex: 1;
+    min-width: 250px;
+}
+
+.ab-form-field label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #1e1e1e;
+}
+
+.ab-form-field input[type="text"],
+.ab-form-field input[type="password"],
+.ab-form-field textarea,
+.ab-form-field select {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.3s ease;
+}
+
+.ab-form-field input:focus,
+.ab-form-field textarea:focus,
+.ab-form-field select:focus {
+    outline: none;
+    border-color: #0073aa;
+    box-shadow: 0 0 0 3px rgba(0, 115, 170, 0.1);
+}
+
+.ab-form-field .description {
+    margin-top: 8px;
+    color: #666;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.ab-form-field code {
+    background: #f0f0f0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 12px;
+}
+
+/* =============================================================================
+   Action Buttons
+   ============================================================================= */
+.ab-action-buttons {
+    display: flex;
+    gap: 15px;
+    margin-top: 25px;
+    padding-top: 20px;
+    border-top: 1px solid #e0e0e0;
+}
+
+.ab-btn {
+    padding: 12px 20px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+}
+
+.ab-btn-primary {
+    background: #0073aa;
+    color: white;
+}
+
+.ab-btn-primary:hover {
+    background: #005a87;
+    color: white;
+}
+
+.ab-btn-secondary {
+    background: #f0f0f0;
+    color: #333;
+}
+
+.ab-btn-secondary:hover {
+    background: #e0e0e0;
+    color: #333;
+}
+
+.ab-btn-success {
+    background: #00a32a;
+    color: white;
+}
+
+.ab-btn-success:hover {
+    background: #008a20;
+    color: white;
+}
+
+.ab-btn-warning {
+    background: #dba617;
+    color: white;
+}
+
+.ab-btn-warning:hover {
+    background: #c19f0a;
+    color: white;
+}
+
+.ab-btn-danger {
+    background: #d63638;
+    color: white;
+}
+
+.ab-btn-danger:hover {
+    background: #b52428;
+    color: white;
+}
+
+.ab-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.ab-btn-loading {
+    position: relative;
+    overflow: hidden;
+}
+
+.ab-btn-loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* =============================================================================
+   Progress Indicators
+   ============================================================================= */
+.ab-progress-bar {
+    width: 100%;
+    height: 6px;
+    background: #f0f0f0;
+    border-radius: 3px;
+    overflow: hidden;
+    margin: 15px 0;
+}
+
+.ab-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #0073aa, #00a32a);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.ab-progress-text {
+    text-align: center;
+    margin-top: 10px;
+    color: #666;
+    font-size: 14px;
+}
+
+/* =============================================================================
+   Worker Status Display
+   ============================================================================= */
+.ab-worker-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    margin: 15px 0;
+}
+
+.ab-worker-status.active {
+    background: #e8f5e8;
+    border: 1px solid #00a32a;
+}
+
+.ab-worker-status.inactive {
+    background: #fef2f2;
+    border: 1px solid #d63638;
+}
+
+.ab-worker-status-icon {
+    font-size: 1.2rem;
+}
+
+.ab-worker-status-text {
+    font-weight: 600;
+}
+
+/* =============================================================================
+   Test Configuration Table
+   ============================================================================= */
+.ab-test-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+}
+
+.ab-test-table th,
+.ab-test-table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.ab-test-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #1e1e1e;
+}
+
+.ab-test-table tr:hover {
+    background: #f8f9fa;
+}
+
+.ab-test-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.ab-test-badge.active {
+    background: #e8f5e8;
+    color: #00a32a;
+}
+
+.ab-test-badge.inactive {
+    background: #fef2f2;
+    color: #d63638;
+}
+
+/* =============================================================================
+   Responsive Design
+   ============================================================================= */
+@media (max-width: 768px) {
+    .ab-status-cards {
+        grid-template-columns: 1fr;
+    }
+    
+    .ab-form-row {
+        flex-direction: column;
+    }
+    
+    .ab-form-field {
+        min-width: 100%;
+    }
+    
+    .ab-action-buttons {
+        flex-direction: column;
+    }
+    
+    .ab-btn {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .cloudflare-ab-admin {
+        padding: 15px;
+    }
+    
+    .cloudflare-ab-admin h1 {
+        font-size: 2rem;
+    }
+}
+
+/* =============================================================================
+   Animations
+   ============================================================================= */
+.ab-fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.ab-slide-in {
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from { transform: translateX(-20px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+/* =============================================================================
+   WordPress Notice Enhancements
+   ============================================================================= */
+.notice.ab-notice {
+    border-left-width: 4px;
+    border-radius: 0 6px 6px 0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.notice.ab-notice p {
+    margin: 0.8em 0;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.notice.ab-notice strong {
+    color: #1e1e1e;
+}
+
+/* =============================================================================
+   Utility Classes
+   ============================================================================= */
+.ab-text-center { text-align: center; }
+.ab-text-left { text-align: left; }
+.ab-text-right { text-align: right; }
+
+.ab-mt-0 { margin-top: 0; }
+.ab-mt-1 { margin-top: 10px; }
+.ab-mt-2 { margin-top: 20px; }
+.ab-mt-3 { margin-top: 30px; }
+
+.ab-mb-0 { margin-bottom: 0; }
+.ab-mb-1 { margin-bottom: 10px; }
+.ab-mb-2 { margin-bottom: 20px; }
+.ab-mb-3 { margin-bottom: 30px; }
+
+.ab-p-0 { padding: 0; }
+.ab-p-1 { padding: 10px; }
+.ab-p-2 { padding: 20px; }
+.ab-p-3 { padding: 30px; }
+
+.ab-hidden { display: none; }
+.ab-visible { display: block; }
+
+.ab-flex { display: flex; }
+.ab-flex-center { display: flex; align-items: center; justify-content: center; }
+.ab-flex-between { display: flex; justify-content: space-between; }
+.ab-flex-gap { gap: 15px; }
+
+.ab-text-success { color: #00a32a; }
+.ab-text-warning { color: #dba617; }
+.ab-text-error { color: #d63638; }
+.ab-text-info { color: #0073aa; }
+.ab-text-muted { color: #666; }
+
+.ab-bg-light { background: #f8f9fa; }
+.ab-bg-white { background: #fff; }
+
+.ab-border { border: 1px solid #e0e0e0; }
+.ab-border-radius { border-radius: 6px; }
+
+.ab-shadow { box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); }
+.ab-shadow-lg { box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); }

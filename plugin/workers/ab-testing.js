@@ -1,13 +1,16 @@
-addEventListener('fetch', event => {
-  event.respondWith(handleRequest(event.request, event));
-});
+export default {
+  async fetch(request, env, ctx) {
+    return handleRequest(request, env, ctx);
+  }
+};
 
 const CONFIG = {
-  TIMEOUT_MS: 30000,
+  TIMEOUT_MS: 10000, // Reduced from 30s to 10s to avoid Cloudflare limits
   COOKIE_MAX_AGE: 31536000, // 1 year
   VALID_VARIANTS: ['A', 'B'],
   MAX_COOKIE_SIZE: 8192,
-  REGISTRY_CACHE_TTL: 300 // 5 minutes
+  REGISTRY_CACHE_TTL: 300, // 5 minutes
+  KV_TIMEOUT_MS: 5000 // Timeout for KV operations
 };
 
 // Pre-compile regex and sets for performance
@@ -17,7 +20,10 @@ const STATIC_EXTENSIONS = new Set([
   'pdf', 'zip', 'ico', 'xml', 'txt'
 ]);
 
-const BYPASS_PATHS = ['/wp-admin/', '/wp-json/', '/wp-login'];
+const BYPASS_PATHS = ['/wp-admin/', '/wp-json/', '/wp-login', '/wp-content/', '/wp-includes/'];
+
+// Pre-compile cookie regexes to avoid per-request compilation
+const cookieRegexCache = new Map(); // cookieName -> RegExp
 
 // Check KV namespace binding once at module load
 let kvNamespaceAvailable = null;
@@ -27,19 +33,24 @@ let registryCache = null;
 let registryCacheTime = 0;
 
 // Cache for common paths that have no tests (to avoid KV lookups)
-// Using Map to store individual timestamps for each path
-const noTestCache = new Map(); // path -> timestamp
+// Using Cache API instead of global Map for memory safety
+const NO_TEST_CACHE_PREFIX = 'https://internal/no-test-cache/';
 
-// Simple logging
-function logInfo(...args) {
-  console.log(...args);
+// Simple logging with debug flag
+function logInfo(env, ...args) {
+  if (env?.DEBUG) {
+    console.log(...args);
+  }
 }
 
-function logWarn(...args) {
-  console.warn(...args);
+function logWarn(env, ...args) {
+  if (env?.DEBUG) {
+    console.warn(...args);
+  }
 }
 
 function logError(...args) {
+  // Always log errors, even in production
   console.error(...args);
 }
 
@@ -49,37 +60,38 @@ if (!CONFIG.TIMEOUT_MS) {
 }
 
 // Check KV namespace availability once
-function checkKVNamespace() {
+function checkKVNamespace(env) {
   if (kvNamespaceAvailable === null) {
-    kvNamespaceAvailable = typeof AB_TESTS_KV !== 'undefined';
+    kvNamespaceAvailable = typeof env.AB_TESTS_KV !== 'undefined';
     if (!kvNamespaceAvailable) {
-      logWarn('KV namespace not bound - A/B testing disabled');
+      logWarn(env, 'KV namespace not bound - A/B testing disabled');
     }
   }
   return kvNamespaceAvailable;
 }
 
-logInfo('Simple A/B Testing Worker initialized');
+// Worker initialization logged per request
 
-async function handleRequest(request) {
+async function handleRequest(request, env, ctx) {
   const url = new URL(request.url);
   const pathname = url.pathname;
   const now = Date.now();
   
   try {
-    // Skip processing for admin, API, or static files
+    // Skip processing for WordPress admin, REST API, system paths, or static files
     if (shouldBypassProcessing(url, request)) {
       return fetch(request);
     }
 
     // Check if this path is known to have no tests (avoid KV call)
-    const pathCacheTime = noTestCache.get(pathname);
-    if (pathCacheTime && (now - pathCacheTime) < (CONFIG.REGISTRY_CACHE_TTL * 1000)) {
+    const noTestCacheKey = new Request(NO_TEST_CACHE_PREFIX + pathname);
+    const cachedNoTest = await caches.default.match(noTestCacheKey);
+    if (cachedNoTest) {
       return fetch(request);
     }
 
     // Get A/B test registry (cached)
-    const registry = await getTestRegistry();
+    const registry = await getTestRegistry(env);
     if (!registry || registry.length === 0) {
       return fetch(request);
     }
@@ -87,32 +99,24 @@ async function handleRequest(request) {
     // Find matching test for current path
     const matchingTest = findMatchingTest(pathname, registry);
     if (!matchingTest) {
-      // Cache this path as having no tests with individual timestamp
-      noTestCache.set(pathname, now);
+      // Cache this path as having no tests using Cache API with TTL
+      const noTestResponse = new Response('no-test', {
+        headers: { 
+          'Cache-Control': `max-age=${CONFIG.REGISTRY_CACHE_TTL}`,
+          'Content-Type': 'text/plain'
+        }
+      });
       
-      // Implement LRU eviction to prevent memory issues
-      if (noTestCache.size > 100) {
-        // Find and remove oldest entry
-        let oldestPath = null;
-        let oldestTime = Infinity;
-        
-        for (const [path, time] of noTestCache) {
-          if (time < oldestTime) {
-            oldestTime = time;
-            oldestPath = path;
-          }
-        }
-        
-        if (oldestPath) {
-          noTestCache.delete(oldestPath);
-        }
-      }
+      // Cache without awaiting to avoid slowing down the request
+      caches.default.put(noTestCacheKey, noTestResponse).catch(e => 
+        logWarn(env, 'No-test cache write failed:', e)
+      );
       
       return fetch(request);
     }
 
     // Handle A/B test logic with timeout
-    return handleABTestWithTimeout(request, url, matchingTest);
+    return handleABTestWithTimeout(request, url, matchingTest, env);
     
   } catch (error) {
     logError('Worker error:', error);
@@ -123,7 +127,7 @@ async function handleRequest(request) {
 function shouldBypassProcessing(url, request) {
   const path = url.pathname;
   
-  // Admin and API paths
+  // WordPress admin, REST API, and system paths
   if (BYPASS_PATHS.some(prefix => path.startsWith(prefix))) {
     return true;
   }
@@ -151,14 +155,14 @@ function shouldBypassProcessing(url, request) {
   
   // Large cookie headers
   if (cookies.length > CONFIG.MAX_COOKIE_SIZE) {
-    logWarn('Cookie header too large, bypassing');
+    logWarn(env, 'Cookie header too large, bypassing');
     return true;
   }
   
   return false;
 }
 
-async function getTestRegistry() {
+async function getTestRegistry(env) {
   const now = Date.now();
   
   // Check in-memory cache first (fastest)
@@ -167,7 +171,7 @@ async function getTestRegistry() {
   }
   
   // Check Cache API for global consistency across instances
-  const cacheKey = new Request('https://internal/ab-registry-cache');
+  const cacheKey = new Request(`https://internal/ab-registry-cache-v1`);
   const cache = caches.default;
   
   try {
@@ -178,43 +182,63 @@ async function getTestRegistry() {
         // Update in-memory cache
         registryCache = cachedRegistry;
         registryCacheTime = now;
-        logInfo('Registry loaded from Cache API:', cachedRegistry.length, 'tests');
+        logInfo(env, 'Registry loaded from Cache API:', cachedRegistry.length, 'tests');
         return cachedRegistry;
       }
     }
   } catch (error) {
-    logWarn('Cache API read failed:', error);
+    logWarn(env, 'Cache API read failed:', error);
   }
   
   try {
     // Check KV namespace availability once
-    if (!checkKVNamespace()) {
+    if (!checkKVNamespace(env)) {
       return [];
     }
     
-    const registry = await AB_TESTS_KV.get("registry", { type: "json" });
+    // Add timeout for KV operations
+    const kvPromise = env.AB_TESTS_KV.get("registry", { type: "json" });
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('KV timeout')), CONFIG.KV_TIMEOUT_MS)
+    );
+    
+    const registry = await Promise.race([kvPromise, timeoutPromise]);
     if (!registry || !Array.isArray(registry)) {
-      logInfo('No valid registry found');
+      logInfo(env, 'No valid registry found');
       // Cache empty result for shorter time to avoid hammering KV
       registryCache = [];
       registryCacheTime = now;
       return [];
     }
     
-    // Cache the successful result in both memory and Cache API
-    registryCache = registry;
+    // Validate registry structure
+    const validRegistry = registry.filter(test => {
+      return test && 
+             typeof test.test === 'string' && 
+             typeof test.cookieName === 'string' && 
+             Array.isArray(test.paths) && 
+             test.paths.length > 0;
+    });
+    
+    if (validRegistry.length !== registry.length) {
+      logWarn(env, `Registry validation: ${registry.length - validRegistry.length} invalid entries filtered`);
+    }
+    
+    // Cache the successful result in both memory and Cache API with immutable copy
+    registryCache = Object.freeze(validRegistry.map(test => Object.freeze({...test})));
     registryCacheTime = now;
-    logInfo('Registry loaded from KV and cached:', registry.length, 'tests');
+    logInfo(env, 'Registry loaded from KV and cached:', validRegistry.length, 'tests');
     
     // Store in Cache API for global consistency
-    const cacheResponse = new Response(JSON.stringify(registry), {
+    const cacheResponse = new Response(JSON.stringify(validRegistry), {
       headers: { 
-        'Cache-Control': `max-age=${CONFIG.REGISTRY_CACHE_TTL}`,
-        'Content-Type': 'application/json'
+        'Cache-Control': `max-age=${CONFIG.REGISTRY_CACHE_TTL}, stale-while-revalidate=${CONFIG.REGISTRY_CACHE_TTL}`,
+        'Content-Type': 'application/json',
+        'CDN-Cache-Control': `max-age=${CONFIG.REGISTRY_CACHE_TTL}`
       }
     });
     await cache.put(cacheKey, cacheResponse).catch(e => 
-      logWarn('Cache API write failed:', e)
+      logWarn(env, 'Cache API write failed:', e)
     );
     
     return registry;
@@ -225,7 +249,7 @@ async function getTestRegistry() {
     // Return cached data if available, even if stale
     if (registryCache) {
       const staleness = Math.round((now - registryCacheTime) / 1000);
-      logWarn(`Using stale cached registry (${staleness}s old) due to fetch error`);
+      logWarn(env, `Using stale cached registry (${staleness}s old) due to fetch error`);
       return registryCache;
     }
     
@@ -243,7 +267,7 @@ function findMatchingTest(pathname, registry) {
   });
 }
 
-async function handleABTestWithTimeout(request, url, test) {
+async function handleABTestWithTimeout(request, url, test, env) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), CONFIG.TIMEOUT_MS);
   
@@ -253,7 +277,7 @@ async function handleABTestWithTimeout(request, url, test) {
     
     // Generate variant if not set
     if (!variant) {
-      variant = generateVariant(request);
+      variant = await generateVariant(request);
     }
     
     // Add variant header for origin
@@ -287,7 +311,7 @@ async function handleABTestWithTimeout(request, url, test) {
     
   } catch (error) {
     if (error.name === 'AbortError') {
-      logWarn('Request timeout, falling back to origin');
+      logWarn(env, 'Request timeout, falling back to origin');
       return fetch(request);
     }
     throw error;
@@ -305,10 +329,14 @@ function getVariantFromRequest(request, cookieName) {
     return urlVariant;
   }
   
-  // Check cookie - more robust parsing
+  // Check cookie - more robust parsing with cached regex
   const cookies = request.headers.get('Cookie') || '';
   if (cookies) {
-    const cookieRegex = new RegExp(`(?:^|; )${cookieName}=([AB])(?:;|$)`);
+    // Use cached regex or create and cache new one
+    if (!cookieRegexCache.has(cookieName)) {
+      cookieRegexCache.set(cookieName, new RegExp(`(?:^|; )${cookieName}=([AB])(?:;|$)`));
+    }
+    const cookieRegex = cookieRegexCache.get(cookieName);
     const match = cookies.match(cookieRegex);
     if (match && CONFIG.VALID_VARIANTS.includes(match[1])) {
       return match[1];
@@ -318,7 +346,7 @@ function getVariantFromRequest(request, cookieName) {
   return null;
 }
 
-function generateVariant(request) {
+async function generateVariant(request) {
   // Get user identifier components for deterministic assignment
   const ip = request.headers.get('CF-Connecting-IP') || 
              request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim() || 
@@ -327,26 +355,24 @@ function generateVariant(request) {
   const userAgent = request.headers.get('User-Agent') || '';
   const cfRay = request.headers.get('CF-Ray') || '';
   
-  // Hash components individually to avoid string concatenation
-  let hash = 0;
+  // Create deterministic input string
+  const input = `${ip}|${userAgent.substring(0, 50)}|${cfRay}`;
   
-  // Hash IP address
-  for (let i = 0; i < ip.length; i++) {
-    hash = ((hash << 5) - hash) + ip.charCodeAt(i);
+  try {
+    // Use WebCrypto SHA-256 for unbiased hash
+    const encoder = new TextEncoder();
+    const data = encoder.encode(input);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = new Uint8Array(hashBuffer);
+    
+    // Use first byte for 50/50 split (more mathematically sound)
+    return (hashArray[0] % 2) === 0 ? 'A' : 'B';
+  } catch (error) {
+    // Fallback to simple hash if WebCrypto fails
+    let hash = 0;
+    for (let i = 0; i < input.length; i++) {
+      hash = ((hash << 5) - hash) + input.charCodeAt(i);
+    }
+    return (hash % 2) === 0 ? 'A' : 'B';
   }
-  
-  // Hash first 50 chars of user agent for performance
-  const ua = userAgent.substring(0, 50);
-  for (let i = 0; i < ua.length; i++) {
-    hash = ((hash << 5) - hash) + ua.charCodeAt(i);
-  }
-  
-  // Hash CF-Ray for additional entropy
-  for (let i = 0; i < cfRay.length; i++) {
-    hash = ((hash << 5) - hash) + cfRay.charCodeAt(i);
-  }
-  
-  // Convert to 32-bit integer and use modulo for 50/50 split
-  hash = hash & 0x7fffffff; // Ensure positive 32-bit integer
-  return (hash % 2) === 0 ? 'A' : 'B';
 }
