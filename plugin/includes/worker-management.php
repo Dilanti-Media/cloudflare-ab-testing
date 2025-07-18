@@ -18,6 +18,37 @@ function cloudflare_ab_debug_log( $message ) {
     }
 }
 
+/**
+ * Builds the multipart/form-data body for uploading a worker script.
+ *
+ * @param array $metadata The metadata for the worker.
+ * @param string $worker_script The worker script content.
+ * @return array An array containing the body and boundary.
+ */
+function cloudflare_ab_build_worker_upload_body( $metadata, $worker_script ) {
+    $boundary = wp_generate_uuid4();
+    $body = '';
+
+    // Add metadata part first
+    $body .= "--{$boundary}\r\n";
+    $body .= "Content-Disposition: form-data; name=\"metadata\"\r\n";
+    $body .= "Content-Type: application/json\r\n\r\n";
+    $body .= json_encode($metadata) . "\r\n";
+
+    // Add script part with field name matching main_module exactly
+    $body .= "--{$boundary}\r\n";
+    $body .= "Content-Disposition: form-data; name=\"script\"; filename=\"script.js\"\r\n";
+    $body .= "Content-Type: application/javascript+module\r\n\r\n";
+    $body .= $worker_script . "\r\n";
+
+    $body .= "--{$boundary}--\r\n";
+
+    return [
+        'body' => $body,
+        'boundary' => $boundary,
+    ];
+}
+
 function cloudflare_ab_get_zone_info( $zone_id, $cf_api_token ) {
     $url = "https://api.cloudflare.com/client/v4/zones/{$zone_id}";
 
@@ -187,31 +218,16 @@ function cloudflare_ab_deploy_worker( $worker_name, $zone_id, $namespace_id, $ve
         'compatibility_flags' => []
     ];
 
-    // Create multipart form data with proper field names
-    $boundary = wp_generate_uuid4();
-    $body = '';
-
-    // Add metadata part first
-    $body .= "--{$boundary}\r\n";
-    $body .= "Content-Disposition: form-data; name=\"metadata\"\r\n";
-    $body .= "Content-Type: application/json\r\n\r\n";
-    $body .= json_encode($metadata) . "\r\n";
-
-    // Add script part with field name matching main_module exactly
-    $body .= "--{$boundary}\r\n";
-    $body .= "Content-Disposition: form-data; name=\"script\"; filename=\"script.js\"\r\n";
-    $body .= "Content-Type: application/javascript+module\r\n\r\n";
-    $body .= $worker_script . "\r\n";
-
-    $body .= "--{$boundary}--\r\n";
+    // Build multipart form data
+    $upload_data = cloudflare_ab_build_worker_upload_body( $metadata, $worker_script );
 
     $upload_response = wp_remote_request( $upload_url, [
         'method'  => 'PUT',
         'headers' => [
             'Authorization' => 'Bearer ' . $cf_api_token,
-            'Content-Type'  => 'multipart/form-data; boundary=' . $boundary,
+            'Content-Type'  => 'multipart/form-data; boundary=' . $upload_data['boundary'],
         ],
-        'body'    => $body,
+        'body'    => $upload_data['body'],
         'timeout' => 30,
     ] );
 
@@ -586,24 +602,11 @@ function cloudflare_ab_ajax_update_worker_code() {
         'compatibility_flags' => []
     ];
     
-    // Create multipart form data with proper field names
-    $boundary = wp_generate_uuid4();
-    $body = '';
-    
-    // Add metadata part first
-    $body .= "--{$boundary}\r\n";
-    $body .= "Content-Disposition: form-data; name=\"metadata\"\r\n";
-    $body .= "Content-Type: application/json\r\n\r\n";
-    $body .= json_encode($metadata) . "\r\n";
-    
-    // Add script part with field name matching main_module exactly
-    $body .= "--{$boundary}\r\n";
-    $body .= "Content-Disposition: form-data; name=\"script\"; filename=\"script.js\"\r\n";
-    $body .= "Content-Type: application/javascript+module\r\n\r\n";
-    $body .= $worker_script . "\r\n";
-    
-    $body .= "--{$boundary}--\r\n";
-    
+    // Build multipart form data
+    $upload_data = cloudflare_ab_build_worker_upload_body( $metadata, $worker_script );
+    $body = $upload_data['body'];
+    $boundary = $upload_data['boundary'];
+
     // Debug: Log detailed information
     cloudflare_ab_debug_log( "[DM A/B] Updated metadata with main_module: " . json_encode( $metadata ) );
     cloudflare_ab_debug_log( "[DM A/B] Multipart body preview: " . substr( $body, 0, 500 ) . "..." );
