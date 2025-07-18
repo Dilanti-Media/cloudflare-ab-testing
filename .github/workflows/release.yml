@@ -11,7 +11,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Get version from tag
       id: get_version
@@ -38,26 +38,11 @@ jobs:
         echo "zip_name=$ZIP_NAME" >> $GITHUB_OUTPUT
         echo "zip_path=releases/$ZIP_NAME" >> $GITHUB_OUTPUT
 
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
+    - name: Create GitHub Release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: Release v${{ steps.release_info.outputs.version }}
-        body: |
-          Release for version v${{ steps.release_info.outputs.version }}
-        draft: false
-        prerelease: false
-
-    - name: Upload Release Asset
-      id: upload-release-asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./${{ steps.release_info.outputs.zip_path }}
-        asset_name: ${{ steps.release_info.outputs.zip_name }}
-        asset_content_type: application/zip
+      run: |
+        gh release create ${{ github.ref }} \
+          --title "Release v${{ steps.release_info.outputs.version }}" \
+          --notes "Release for version v${{ steps.release_info.outputs.version }}" \
+          ./${{ steps.release_info.outputs.zip_path }}
