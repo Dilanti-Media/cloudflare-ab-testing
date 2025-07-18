@@ -15,7 +15,9 @@ function cloudflare_ab_push_registry_to_kv( $old_value, $new_value ) {
     $cf_api_token    = $credentials['api_token'] ?? '';
 
     if ( empty($cf_account_id) || empty($cf_namespace_id) || empty($cf_api_token) ) {
-        error_log('[DM A/B] Cloudflare credentials are not set. Cannot push to KV.');
+        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+            error_log('[DM A/B] Cloudflare credentials are not set. Cannot push to KV.');
+        }
         return;
     }
 
@@ -51,7 +53,9 @@ function cloudflare_ab_push_registry_to_kv( $old_value, $new_value ) {
     ] );
 
     if ( is_wp_error( $response ) || wp_remote_retrieve_response_code( $response ) !== 200 ) {
-        error_log( '[DM A/B] Failed to update KV registry: ' . print_r( $response, true ) );
+        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+            error_log( '[DM A/B] Failed to update KV registry: ' . print_r( $response, true ) );
+        }
     }
 }
 

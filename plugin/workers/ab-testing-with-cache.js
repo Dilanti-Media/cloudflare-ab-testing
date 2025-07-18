@@ -32,16 +32,24 @@ let registryCacheTime = 0;
 // Using Map to store individual timestamps for each path
 const noTestCache = new Map(); // path -> timestamp
 
-// Simple logging
+// Debug configuration - can be toggled via environment variable
+const DEBUG_MODE = false; // Set to true to enable debug logging
+
+// Simple logging with debug flag
 function logInfo(...args) {
-  console.log(...args);
+  if (DEBUG_MODE) {
+    console.log(...args);
+  }
 }
 
 function logWarn(...args) {
-  console.warn(...args);
+  if (DEBUG_MODE) {
+    console.warn(...args);
+  }
 }
 
 function logError(...args) {
+  // Always log errors, even in production
   console.error(...args);
 }
 

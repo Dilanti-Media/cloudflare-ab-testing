@@ -82,7 +82,10 @@ function cloudflare_ab_enqueue_assets() {
             'cookieName' => 'AB_' . strtoupper( str_replace( '-', '_', $slug ) ),
         ];
     }
-    wp_localize_script( 'cloudflare-ab-testing-script', 'cloudflareAbTesting', [ 'registry' => $tests ] );
+    wp_localize_script( 'cloudflare-ab-testing-script', 'cloudflareAbTesting', [ 
+        'registry' => $tests,
+        'debug' => ( ( is_user_logged_in() && current_user_can( 'manage_options' ) ) || ( defined( 'WP_DEBUG' ) && WP_DEBUG ) )
+    ] );
     
     // Add PHP debug output for logged-in users or when debug mode is enabled
     if ( ( is_user_logged_in() && current_user_can( 'manage_options' ) ) || ( defined( 'WP_DEBUG' ) && WP_DEBUG ) ) {

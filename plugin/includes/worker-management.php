@@ -7,6 +7,15 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit; // Exit if accessed directly
 }
 
+/**
+ * Debug logging helper - only logs when WP_DEBUG is enabled
+ */
+function cloudflare_ab_debug_log( $message ) {
+    if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+        error_log( $message );
+    }
+}
+
 function cloudflare_ab_get_zone_info( $zone_id, $cf_api_token ) {
     $url = "https://api.cloudflare.com/client/v4/zones/{$zone_id}";
 
@@ -557,7 +566,7 @@ function cloudflare_ab_ajax_update_worker_code() {
     // Debug: Log first few lines to verify content
     $script_lines = explode( "\n", $worker_script );
     $first_lines = array_slice( $script_lines, 0, 5 );
-    error_log( "[DM A/B] Worker script first 5 lines: " . implode( " | ", $first_lines ) );
+    cloudflare_ab_debug_log( "[DM A/B] Worker script first 5 lines: " . implode( " | ", $first_lines ) );
     
     // Update worker script with KV binding (same as deploy logic)
     $upload_url = "https://api.cloudflare.com/client/v4/accounts/{$cf_account_id}/workers/scripts/{$worker_id}";
@@ -594,10 +603,10 @@ function cloudflare_ab_ajax_update_worker_code() {
     $body .= "--{$boundary}--\r\n";
     
     // Debug: Log detailed information
-    error_log( "[DM A/B] Updated metadata with main_module: " . json_encode( $metadata ) );
-    error_log( "[DM A/B] Multipart body preview: " . substr( $body, 0, 500 ) . "..." );
-    error_log( "[DM A/B] Boundary: " . $boundary );
-    error_log( "[DM A/B] Full metadata part: " . substr( $body, strpos( $body, 'name="metadata"' ), 200 ) );
+    cloudflare_ab_debug_log( "[DM A/B] Updated metadata with main_module: " . json_encode( $metadata ) );
+    cloudflare_ab_debug_log( "[DM A/B] Multipart body preview: " . substr( $body, 0, 500 ) . "..." );
+    cloudflare_ab_debug_log( "[DM A/B] Boundary: " . $boundary );
+    cloudflare_ab_debug_log( "[DM A/B] Full metadata part: " . substr( $body, strpos( $body, 'name="metadata"' ), 200 ) );
     
     $upload_response = wp_remote_request( $upload_url, [
         'method'  => 'PUT',
@@ -618,10 +627,10 @@ function cloudflare_ab_ajax_update_worker_code() {
         $upload_body = wp_remote_retrieve_body( $upload_response );
         
         // Log for debugging
-        error_log( "[DM A/B] Worker update failed for {$worker_id}: HTTP {$response_code}" );
-        error_log( "[DM A/B] Response body: " . $upload_body );
-        error_log( "[DM A/B] Script length: " . strlen( $worker_script ) );
-        error_log( "[DM A/B] Metadata: " . json_encode( $metadata ) );
+        cloudflare_ab_debug_log( "[DM A/B] Worker update failed for {$worker_id}: HTTP {$response_code}" );
+        cloudflare_ab_debug_log( "[DM A/B] Response body: " . $upload_body );
+        cloudflare_ab_debug_log( "[DM A/B] Script length: " . strlen( $worker_script ) );
+        cloudflare_ab_debug_log( "[DM A/B] Metadata: " . json_encode( $metadata ) );
         
         wp_send_json_error( 'Failed to update worker: ' . $upload_body );
     }
@@ -639,19 +648,19 @@ function cloudflare_ab_get_worker_template( $version = 'cache' ) {
     }
     
     // Debug logging
-    error_log( '[DM A/B] Loading worker template: ' . $template_file );
-    error_log( '[DM A/B] Plugin dir: ' . $plugin_dir );
-    error_log( '[DM A/B] Version requested: ' . $version );
-    error_log( '[DM A/B] File exists: ' . (file_exists( $template_file ) ? 'YES' : 'NO') );
+    cloudflare_ab_debug_log( '[DM A/B] Loading worker template: ' . $template_file );
+    cloudflare_ab_debug_log( '[DM A/B] Plugin dir: ' . $plugin_dir );
+    cloudflare_ab_debug_log( '[DM A/B] Version requested: ' . $version );
+    cloudflare_ab_debug_log( '[DM A/B] File exists: ' . (file_exists( $template_file ) ? 'YES' : 'NO') );
     
     if ( ! file_exists( $template_file ) ) {
-        error_log( '[DM A/B] Worker template file not found: ' . $template_file );
+        cloudflare_ab_debug_log( '[DM A/B] Worker template file not found: ' . $template_file );
         return '';
     }
     
     $content = file_get_contents( $template_file );
-    error_log( '[DM A/B] Template content length: ' . strlen( $content ) );
-    error_log( '[DM A/B] Template first 100 chars: ' . substr( $content, 0, 100 ) );
+    cloudflare_ab_debug_log( '[DM A/B] Template content length: ' . strlen( $content ) );
+    cloudflare_ab_debug_log( '[DM A/B] Template first 100 chars: ' . substr( $content, 0, 100 ) );
     
     return $content;
 }
