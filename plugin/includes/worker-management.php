@@ -12,7 +12,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 function cloudflare_ab_debug_log( $message ) {
     if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-        error_log( $message );
+        // Sanitize the message to prevent log injection attacks
+        $sanitized_message = is_string( $message ) ? json_encode( $message ) : json_encode( print_r( $message, true ) );
+        error_log( $sanitized_message );
     }
 }
 
