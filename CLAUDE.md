@@ -147,16 +147,16 @@ cd testing/ && node test-ab-distribution.js
 
 ### 2. Testing Changes
 ```bash
-# Local algorithm testing
+# Local algorithm testing (50K samples)
 node testing/test-ab-distribution.js
 
-# Live system testing (requires .env with proxy credentials)
-node testing/test-corrected-proxy-distribution.js
+# Complete system testing (requires .env with proxy credentials)
+node testing/test-ab-system.js
 
 # Manual testing
 # Visit: https://cloudflare-ab-testing.dilanti.media/
 # Check browser console for debug output
-# Use: ?AB_HOMEPAGE_TEST=B to force variants
+# Use: ?AB_HOMEPAGE_TEST=A or ?AB_HOMEPAGE_TEST=B to force variants
 ```
 
 ### 3. Debugging Issues
@@ -188,8 +188,8 @@ cloudflare-ab-testing/
 ├── testing/                         # Comprehensive test suite
 │   ├── README.md                    # Testing documentation
 │   ├── test-ab-distribution.js      # Algorithm validation (50K samples)
-│   ├── test-corrected-proxy-distribution.js  # Real-world testing
-│   └── [other test files]
+│   ├── test-ab-system.js            # Complete system verification
+│   └── [other utility files]
 ├── sync-to-wordpress.sh             # Quick sync script
 ├── SYNC_INSTRUCTIONS.md             # Sync documentation
 └── README.md                        # Main documentation
@@ -233,8 +233,8 @@ cloudflare-ab-testing/
 # Algorithm test (50K samples)
 node testing/test-ab-distribution.js
 
-# Real-world test (requires proxy credentials)
-node testing/test-corrected-proxy-distribution.js
+# Complete system test (requires proxy credentials)
+node testing/test-ab-system.js
 
 # Live system test
 ./testing/test-live-distribution.sh

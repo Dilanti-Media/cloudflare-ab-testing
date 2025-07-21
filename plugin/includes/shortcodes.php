@@ -18,13 +18,34 @@ function cloudflare_ab_simple_ab_shortcode( $atts ) {
     $param_upper = strtoupper($atts['param']);
     $sel = $atts['default']; // Default value
 
+    // Debug logging for troubleshooting (only when WP_DEBUG is true)
+    $debug_info = [];
+    
     if ( ! empty( $_GET[ $atts['param'] ] ) ) {
         $sel = sanitize_key( $_GET[ $atts['param'] ] );
+        $debug_info[] = "Source: GET parameter, Value: $sel";
+    } elseif ( ! empty( $_SERVER[ 'HTTP_X_AB_VARIANT' ] ) ) {
+        // Check Cloudflare Worker's X-AB-Variant header first
+        $sel = sanitize_key( $_SERVER[ 'HTTP_X_AB_VARIANT' ] );
+        $debug_info[] = "Source: X-AB-Variant header, Value: $sel";
     } elseif ( ! empty( $_SERVER[ 'HTTP_X_' . $param_upper ] ) ) {
         $sel = sanitize_key( $_SERVER[ 'HTTP_X_' . $param_upper ] );
+        $debug_info[] = "Source: HTTP_X_{$param_upper} header, Value: $sel";
     } elseif ( ! empty( $_COOKIE[ $atts['param'] ] ) ) {
         $sel = sanitize_key( $_COOKIE[ $atts['param'] ] );
+        $debug_info[] = "Source: Cookie {$atts['param']}, Value: $sel";
+    } else {
+        $debug_info[] = "Source: Default fallback, Value: $sel";
     }
+    
+    // Add debug output to HTML - always include for troubleshooting
+    $server_debug = [];
+    $server_debug[] = "GET_param: " . (isset($_GET[$atts['param']]) ? $_GET[$atts['param']] : 'NOT_SET');
+    $server_debug[] = "X-AB-Variant: " . (isset($_SERVER['HTTP_X_AB_VARIANT']) ? $_SERVER['HTTP_X_AB_VARIANT'] : 'NOT_SET');
+    $server_debug[] = "Cookie: " . (isset($_COOKIE[$atts['param']]) ? $_COOKIE[$atts['param']] : 'NOT_SET');
+    
+    $debug_comment = "<!-- AB-DEBUG: " . implode(' | ', $debug_info) . " | SERVER: " . implode(' | ', $server_debug) . " -->\n";
+    echo $debug_comment;
 
     $sel = strtolower($sel);
     $sc = isset( $atts[ $sel ] ) ? trim( $atts[ $sel ] ) : '';
@@ -60,6 +81,11 @@ function cloudflare_ab_debug_shortcode() {
     if ( isset( $_GET[ $cookie_name ] ) ) {
         $output .= '<li><strong>Source:</strong> GET Parameter (<code>' . esc_html( $cookie_name ) . '</code>)</li>';
         $output .= '<li><strong>Value:</strong> ' . esc_html( sanitize_key( $_GET[ $cookie_name ] ) ) . '</li>';
+    }
+    // Check Cloudflare Worker X-AB-Variant Header
+    elseif ( isset( $_SERVER[ 'HTTP_X_AB_VARIANT' ] ) ) {
+        $output .= '<li><strong>Source:</strong> Cloudflare Worker Header (<code>X-AB-Variant</code>)</li>';
+        $output .= '<li><strong>Value:</strong> ' . esc_html( sanitize_key( $_SERVER[ 'HTTP_X_AB_VARIANT' ] ) ) . '</li>';
     }
     // Check Cloudflare Worker Header
     elseif ( isset( $_SERVER[ 'HTTP_X_' . $param_upper ] ) ) {

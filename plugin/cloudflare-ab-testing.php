@@ -184,6 +184,9 @@ function cloudflare_ab_add_debug_output( $tests ) {
             if ( !empty( $_GET[$cookie_name] ) ) {
                 $variant = sanitize_key( $_GET[$cookie_name] );
                 $source = 'URL Parameter';
+            } elseif ( !empty( $_SERVER['HTTP_X_AB_VARIANT'] ) ) {
+                $variant = sanitize_key( $_SERVER['HTTP_X_AB_VARIANT'] );
+                $source = 'Cloudflare Worker Header (X-AB-Variant)';
             } elseif ( !empty( $_SERVER['HTTP_X_' . strtoupper($cookie_name)] ) ) {
                 $variant = sanitize_key( $_SERVER['HTTP_X_' . strtoupper($cookie_name)] );
                 $source = 'Worker Header';
