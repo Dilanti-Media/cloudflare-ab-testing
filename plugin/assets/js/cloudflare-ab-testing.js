@@ -1,21 +1,10 @@
 (function() {
     'use strict';
 
-    // Debug mode - enabled for admin users or when WP_DEBUG is true
-    const DEBUG_MODE = window.cloudflareAbTesting?.debug || false;
-
-    // Debug logging helper
-    function debugLog(...args) {
-        if (DEBUG_MODE) {
-            console.log(...args);
-        }
-    }
-
     // Data passed from WordPress is available in `cloudflareAbTesting.registry`
     const registry = window.cloudflareAbTesting?.registry || [];
 
     if (!registry || registry.length === 0) {
-        debugLog('[DM A/B] No tests configured.');
         return;
     }
 
