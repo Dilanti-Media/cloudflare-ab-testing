@@ -280,8 +280,9 @@ async function handleABTestWithTimeout(request, url, test, env) {
       variant = await generateVariant(request);
     }
     
-    // Add variant header for origin
+    // Add variant headers for origin (both specific and generic)
     headers.set('X-' + test.cookieName, variant);
+    headers.set('X-AB-Variant', variant);
     
     // Create modified request
     const modifiedRequest = new Request(request, { headers });

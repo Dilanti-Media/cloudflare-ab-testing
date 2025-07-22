@@ -18,13 +18,20 @@ function cloudflare_ab_simple_ab_shortcode( $atts ) {
     $param_upper = strtoupper($atts['param']);
     $sel = $atts['default']; // Default value
 
+    // Determine variant source priority: GET > X-AB-Variant header > specific header > cookie > default
     if ( ! empty( $_GET[ $atts['param'] ] ) ) {
         $sel = sanitize_key( $_GET[ $atts['param'] ] );
+    } elseif ( ! empty( $_SERVER[ 'HTTP_X_AB_VARIANT' ] ) ) {
+        // Check Cloudflare Worker's X-AB-Variant header first
+        $sel = sanitize_key( $_SERVER[ 'HTTP_X_AB_VARIANT' ] );
     } elseif ( ! empty( $_SERVER[ 'HTTP_X_' . $param_upper ] ) ) {
         $sel = sanitize_key( $_SERVER[ 'HTTP_X_' . $param_upper ] );
     } elseif ( ! empty( $_COOKIE[ $atts['param'] ] ) ) {
         $sel = sanitize_key( $_COOKIE[ $atts['param'] ] );
     }
+    
+    // Debug output removed to avoid confusion from timing mismatches
+    // between Worker headers and cookie values
 
     $sel = strtolower($sel);
     $sc = isset( $atts[ $sel ] ) ? trim( $atts[ $sel ] ) : '';
@@ -60,6 +67,11 @@ function cloudflare_ab_debug_shortcode() {
     if ( isset( $_GET[ $cookie_name ] ) ) {
         $output .= '<li><strong>Source:</strong> GET Parameter (<code>' . esc_html( $cookie_name ) . '</code>)</li>';
         $output .= '<li><strong>Value:</strong> ' . esc_html( sanitize_key( $_GET[ $cookie_name ] ) ) . '</li>';
+    }
+    // Check Cloudflare Worker X-AB-Variant Header
+    elseif ( isset( $_SERVER[ 'HTTP_X_AB_VARIANT' ] ) ) {
+        $output .= '<li><strong>Source:</strong> Cloudflare Worker Header (<code>X-AB-Variant</code>)</li>';
+        $output .= '<li><strong>Value:</strong> ' . esc_html( sanitize_key( $_SERVER[ 'HTTP_X_AB_VARIANT' ] ) ) . '</li>';
     }
     // Check Cloudflare Worker Header
     elseif ( isset( $_SERVER[ 'HTTP_X_' . $param_upper ] ) ) {

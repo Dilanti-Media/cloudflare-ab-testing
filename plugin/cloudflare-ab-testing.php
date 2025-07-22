@@ -184,6 +184,9 @@ function cloudflare_ab_add_debug_output( $tests ) {
             if ( !empty( $_GET[$cookie_name] ) ) {
                 $variant = sanitize_key( $_GET[$cookie_name] );
                 $source = 'URL Parameter';
+            } elseif ( !empty( $_SERVER['HTTP_X_AB_VARIANT'] ) ) {
+                $variant = sanitize_key( $_SERVER['HTTP_X_AB_VARIANT'] );
+                $source = 'Cloudflare Worker Header (X-AB-Variant)';
             } elseif ( !empty( $_SERVER['HTTP_X_' . strtoupper($cookie_name)] ) ) {
                 $variant = sanitize_key( $_SERVER['HTTP_X_' . strtoupper($cookie_name)] );
                 $source = 'Worker Header';
@@ -204,16 +207,6 @@ function cloudflare_ab_add_debug_output( $tests ) {
         }
     }
     
-    if ( !empty( $active_tests ) ) {
-        add_action( 'wp_footer', function() use ( $active_tests ) {
-            echo "<!-- A/B Test Debug Info -->\n";
-            echo "<script>\n";
-            echo "console.log('%c🧪 PHP A/B Test Debug Info:', 'color: #d63638; font-weight: bold; font-size: 14px;');\n";
-            foreach ( $active_tests as $test ) {
-                echo "console.log('%c   PHP Test: {$test['test']} | Variant: {$test['variant']} | Source: {$test['source']}', 'color: #d63638;');\n";
-            }
-            echo "</script>\n";
-            echo "<!-- End A/B Test Debug -->\n";
-        } );
-    }
+    // Debug output removed to avoid confusion from timing mismatches
+    // and stale cookie/header values
 }
