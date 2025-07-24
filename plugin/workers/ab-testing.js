@@ -31,6 +31,8 @@ let kvNamespaceAvailable = null;
 // In-memory cache for KV registry
 let registryCache = null;
 let registryCacheTime = 0;
+let kvFailureCount = 0;
+const KV_FAILURE_THRESHOLD = 5;
 
 // Cache for common paths that have no tests (to avoid KV lookups)
 // Using Cache API instead of global Map for memory safety
@@ -73,11 +75,12 @@ function checkKVNamespace(env) {
 // Worker initialization logged per request
 
 async function handleRequest(request, env, ctx) {
-  const url = new URL(request.url);
-  const pathname = url.pathname;
-  const now = Date.now();
-  
-  try {
+  const startTime = Date.now();
+
+  const handle = async () => {
+    const url = new URL(request.url);
+    const pathname = url.pathname;
+
     // Skip processing for WordPress admin, REST API, system paths, or static files
     if (shouldBypassProcessing(url, request)) {
       return fetch(request);
@@ -91,7 +94,7 @@ async function handleRequest(request, env, ctx) {
     }
 
     // Get A/B test registry (cached)
-    const registry = await getTestRegistry(env);
+    const registry = await getTestRegistry(env, ctx);
     if (!registry || registry.length === 0) {
       return fetch(request);
     }
@@ -101,26 +104,43 @@ async function handleRequest(request, env, ctx) {
     if (!matchingTest) {
       // Cache this path as having no tests using Cache API with TTL
       const noTestResponse = new Response('no-test', {
-        headers: { 
+        headers: {
           'Cache-Control': `max-age=${CONFIG.REGISTRY_CACHE_TTL}`,
           'Content-Type': 'text/plain'
         }
       });
-      
+
       // Cache without awaiting to avoid slowing down the request
-      caches.default.put(noTestCacheKey, noTestResponse).catch(e => 
-        logWarn(env, 'No-test cache write failed:', e)
-      );
-      
+      ctx.waitUntil(caches.default.put(noTestCacheKey, noTestResponse));
+
       return fetch(request);
     }
 
     // Handle A/B test logic with timeout
     return handleABTestWithTimeout(request, url, matchingTest, env);
-    
+  };
+
+  try {
+    const response = await handle();
+    // Clone headers to make them mutable
+    const newHeaders = new Headers(response.headers);
+    newHeaders.set('X-Worker-Duration', `${Date.now() - startTime}ms`);
+
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: newHeaders,
+    });
   } catch (error) {
     logError('Worker error:', error);
-    return fetch(request);
+    const errorResponse = new Response('Internal Server Error', { status: 500 });
+    const newHeaders = new Headers(errorResponse.headers);
+    newHeaders.set('X-Worker-Duration', `${Date.now() - startTime}ms`);
+    return new Response(errorResponse.body, {
+      status: errorResponse.status,
+      statusText: errorResponse.statusText,
+      headers: newHeaders,
+    });
   }
 }
 
@@ -162,12 +182,22 @@ function shouldBypassProcessing(url, request) {
   return false;
 }
 
-async function getTestRegistry(env) {
+async function getTestRegistry(env, ctx) {
   const now = Date.now();
   
   // Check in-memory cache first (fastest)
   if (registryCache && (now - registryCacheTime) < (CONFIG.REGISTRY_CACHE_TTL * 1000)) {
     return registryCache;
+  }
+
+  // Error boundary enhancement: circuit breaker for KV failures
+  if (kvFailureCount > KV_FAILURE_THRESHOLD) {
+    logWarn(env, `KV failure threshold exceeded (${kvFailureCount} failures), skipping A/B testing temporarily.`);
+    // Still check for stale cache, but don't hit KV
+    if (registryCache) {
+      return registryCache;
+    }
+    return [];
   }
   
   // Check Cache API for global consistency across instances
@@ -237,14 +267,14 @@ async function getTestRegistry(env) {
         'CDN-Cache-Control': `max-age=${CONFIG.REGISTRY_CACHE_TTL}`
       }
     });
-    await cache.put(cacheKey, cacheResponse).catch(e => 
-      logWarn(env, 'Cache API write failed:', e)
-    );
+    ctx.waitUntil(cache.put(cacheKey, cacheResponse));
     
+    kvFailureCount = 0; // Reset failure count on success
     return registry;
     
   } catch (error) {
     logError('Registry fetch failed:', error);
+    kvFailureCount++; // Increment failure count
     
     // Return cached data if available, even if stale
     if (registryCache) {
@@ -333,6 +363,10 @@ function getVariantFromRequest(request, cookieName) {
   // Check cookie - more robust parsing with cached regex
   const cookies = request.headers.get('Cookie') || '';
   if (cookies) {
+    // Memory optimization: Consider periodic cleanup of cookieRegexCache
+    if (cookieRegexCache.size > 50) {
+      cookieRegexCache.clear();
+    }
     // Use cached regex or create and cache new one
     if (!cookieRegexCache.has(cookieName)) {
       cookieRegexCache.set(cookieName, new RegExp(`(?:^|; )${cookieName}=([AB])(?:;|$)`));
