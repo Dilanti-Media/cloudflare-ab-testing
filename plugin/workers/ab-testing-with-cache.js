@@ -313,7 +313,8 @@ async function handleABTestWithTimeout(request, url, test, env) {
     newResponse.headers.set('Set-Cookie', 
       `${test.cookieName}=${variant}; Path=/; Max-Age=${CONFIG.COOKIE_MAX_AGE}; SameSite=Lax; Secure; HttpOnly`);
     
-    // Add debug headers
+    // Add cache-aware headers - prevent WordPress from serving wrong variant
+    newResponse.headers.set('Vary', 'Cookie');
     newResponse.headers.set('X-Worker-Active', 'true');
     newResponse.headers.set('X-AB-Test', test.test);
     newResponse.headers.set('X-AB-Variant', variant);
