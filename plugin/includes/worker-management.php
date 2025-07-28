@@ -646,6 +646,9 @@ function cloudflare_ab_ajax_update_worker_code() {
 function cloudflare_ab_get_worker_template( $version = 'cache' ) {
     $plugin_dir = plugin_dir_path( dirname( __FILE__ ) );
     
+    // Ensure explicit string comparison to prevent type issues
+    $version = strtolower(trim($version));
+    
     if ( $version === 'simple' ) {
         $template_file = $plugin_dir . 'workers/ab-testing.js';
     } else {
@@ -654,9 +657,8 @@ function cloudflare_ab_get_worker_template( $version = 'cache' ) {
     
     // Debug logging
     cloudflare_ab_debug_log( '[DM A/B] Loading worker template: ' . $template_file );
-    cloudflare_ab_debug_log( '[DM A/B] Plugin dir: ' . $plugin_dir );
-    cloudflare_ab_debug_log( '[DM A/B] Version requested: ' . $version );
-    cloudflare_ab_debug_log( '[DM A/B] File exists: ' . (file_exists( $template_file ) ? 'YES' : 'NO') );
+    cloudflare_ab_debug_log( '[DM A/B] Version requested: "' . $version . '"' );
+    cloudflare_ab_debug_log( '[DM A/B] Selected: ' . ( $version === 'simple' ? 'simple worker' : 'cache worker' ) );
     
     if ( ! file_exists( $template_file ) ) {
         cloudflare_ab_debug_log( '[DM A/B] Worker template file not found: ' . $template_file );
@@ -664,8 +666,8 @@ function cloudflare_ab_get_worker_template( $version = 'cache' ) {
     }
     
     $content = file_get_contents( $template_file );
-    cloudflare_ab_debug_log( '[DM A/B] Template content length: ' . strlen( $content ) );
-    cloudflare_ab_debug_log( '[DM A/B] Template first 100 chars: ' . substr( $content, 0, 100 ) );
+    cloudflare_ab_debug_log( '[DM A/B] ' . ( $version === 'simple' ? 'SIMPLE' : 'CACHE' ) . ' worker loaded - ' . strlen( $content ) . ' chars' );
+    cloudflare_ab_debug_log( '[DM A/B] First 50 chars: ' . substr( $content, 0, 50) );
     
     return $content;
 }
@@ -862,7 +864,7 @@ function cloudflare_ab_worker_management_page_markup() {
                             <tr>
                                 <th scope="row">Worker Name</th>
                                 <td>
-                                    <input type="text" id="worker-name" value="ab-testing-with-cache" class="regular-text" />
+                                    <input type="text" id="worker-name" class="regular-text" placeholder="e.g., ab-testing-cart, homepage-ab, pricing-test" />
                                     <p class="description">Name for your worker (letters, numbers, hyphens only)</p>
                                 </td>
                             </tr>
@@ -976,11 +978,11 @@ function cloudflare_ab_worker_management_page_markup() {
                     <p>This is the worker code that will be deployed:</p>
                     <div style="margin-bottom: 10px;">
                         <strong>Version:</strong>
-                        <span id="template-version-display" style="color: #00a32a;">Full Version (with caching)</span>
+                        <span id="template-version-display" style="color: <?php echo $selected_worker_version === 'simple' ? '#f59e0b' : '#00a32a'; ?>"><?php echo $selected_worker_version === 'simple' ? 'Simple Version (lightweight)' : 'Full Version (with caching)'; ?></span>
                         <br><small>Source: Plugin workers directory</small>
                     </div>
 
-                    <textarea readonly style="width: 100%; height: 300px; font-family: monospace; font-size: 12px;" id="worker-template"><?php echo esc_textarea(cloudflare_ab_get_worker_template('cache')); ?></textarea>
+                    <textarea readonly style="width: 100%; height: 300px; font-family: monospace; font-size: 12px;" id="worker-template"><?php echo esc_textarea(cloudflare_ab_get_worker_template($selected_worker_version)); ?></textarea>
 
                     <p class="description">
                         <strong>Key Features:</strong>
@@ -991,9 +993,9 @@ function cloudflare_ab_worker_management_page_markup() {
                             <li>✅ Bypass for admin pages and static files</li>
                             <li>✅ Comprehensive error handling</li>
                             <li>✅ Debug headers for monitoring</li>
-                            <li id="cache-features">✅ Advanced caching system with cache keys</li>
-                            <li id="static-features">✅ Static asset optimization</li>
-                            <li id="coalescing-features">✅ Request coalescing</li>
+                            <li id="cache-features"<?php if ($selected_worker_version === 'simple') echo ' style="display: none;"'; ?>>✅ Advanced caching system with cache keys</li>
+                            <li id="static-features"<?php if ($selected_worker_version === 'simple') echo ' style="display: none;"'; ?>>✅ Static asset optimization</li>
+                            <li id="coalescing-features"<?php if ($selected_worker_version === 'simple') echo ' style="display: none;"'; ?>>✅ Request coalescing</li>
                         </ul>
                     </p>
 
@@ -1049,6 +1051,11 @@ function cloudflare_ab_worker_management_page_markup() {
 
                 preview.text(pattern);
             }
+
+            // Initialize worker name on page load
+            $(document).ready(function() {
+                updateWorkerName();
+            });
 
             // Load zones
             function loadZones() {
@@ -1355,7 +1362,14 @@ function cloudflare_ab_worker_management_page_markup() {
                 });
             }
 
-            // Worker template preview
+            // Update worker name based on version
+            function updateWorkerName() {
+                const version = $('#worker-version').val();
+                const workerName = version === 'simple' ? 'ab-testing-simple' : 'ab-testing-with-cache';
+                $('#worker-name').val(workerName);
+            }
+
+            // Worker template preview and name sync
             $('#worker-version').change(function() {
                 const version = $(this).val();
                 const featuresList = $('#worker-features');
@@ -1367,6 +1381,9 @@ function cloudflare_ab_worker_management_page_markup() {
                     $('#template-version-display').text('Full Version (with caching)').css('color', '#00a32a');
                     featuresList.find('#cache-features, #static-features, #coalescing-features').show();
                 }
+                
+                // Update worker name to match selection
+                updateWorkerName();
 
                 // Load worker template
                 $.ajax({

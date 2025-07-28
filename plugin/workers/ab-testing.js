@@ -335,7 +335,8 @@ async function handleABTestWithTimeout(request, url, test, env) {
     newResponse.headers.set('Set-Cookie', 
       `${test.cookieName}=${variant}; Path=/; Max-Age=${CONFIG.COOKIE_MAX_AGE}; SameSite=Lax; Secure; HttpOnly`);
     
-    // Add debug headers
+    // Add cache-aware headers - prevent WordPress from serving wrong variant
+    newResponse.headers.set('Vary', 'Cookie');
     newResponse.headers.set('X-Worker-Active', 'true');
     newResponse.headers.set('X-AB-Test', test.test);
     newResponse.headers.set('X-AB-Variant', variant);
@@ -405,7 +406,7 @@ async function generateVariant(request) {
     // Use first byte for 50/50 split (more mathematically sound)
     return (hashArray[0] % 2) === 0 ? 'A' : 'B';
   } catch (error) {
-    // Fallback to simple hash if WebCrypto fails
+    // I see tFallback to simple hash if WebCrypto fails
     let hash = 0;
     for (let i = 0; i < input.length; i++) {
       hash = ((hash << 5) - hash) + input.charCodeAt(i);
