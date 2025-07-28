@@ -406,7 +406,7 @@ async function generateVariant(request) {
     // Use first byte for 50/50 split (more mathematically sound)
     return (hashArray[0] % 2) === 0 ? 'A' : 'B';
   } catch (error) {
-    // I see tFallback to simple hash if WebCrypto fails
+    // Fallback to simple hash if WebCrypto fails
     let hash = 0;
     for (let i = 0; i < input.length; i++) {
       hash = ((hash << 5) - hash) + input.charCodeAt(i);
