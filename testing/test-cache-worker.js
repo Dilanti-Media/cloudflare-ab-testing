@@ -62,7 +62,7 @@ function testCacheWorkerLogic() {
     console.log(`WordPress cookies handled: ${wpCookies} cookie types`);
     
     // Count WordPress query params
-    const wpParams = (cacheWorkerContent.match(/'preview'|'p'|'page_id'|'s'|'customize_theme'/g) || []).length;
+    const wpParams = (cacheWorkerContent.match(/['"]preview['"]|['"]p['"]|['"]page_id['"]|['"]s['"]|['"]customize_theme['"]/g) || []).length;
     console.log(`WordPress query params: ${wpParams} parameters`);
     
     console.log('');
