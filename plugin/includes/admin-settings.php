@@ -58,6 +58,7 @@ function cloudflare_ab_register_settings() {
     register_setting( 'cloudflare_ab_options_group', 'cloudflare_ab_enabled_urls', 'cloudflare_ab_sanitize_urls' );
     register_setting( 'cloudflare_ab_options_group', 'cloudflare_ab_cloudflare_credentials' );
     register_setting( 'cloudflare_ab_options_group', 'cloudflare_ab_worker_version' );
+    register_setting( 'cloudflare_ab_options_group', 'cloudflare_ab_github_updater' );
 
     // --- Section: Test Configuration ---
     add_settings_section(
@@ -113,7 +114,44 @@ function cloudflare_ab_register_settings() {
         'cloudflare_ab_section_cloudflare',
         [ 'key' => 'api_token', 'label' => 'API Token', 'is_secret' => true, 'help' => 'Create this at My Profile > API Tokens with "Account:Zone:Read" and "Account:Cloudflare Workers:Edit" permissions' ]
     );
-    
+
+    // --- Section: Plugin Updates ---
+    add_settings_section(
+        'cloudflare_ab_section_updates',
+        __( 'Plugin Updates', 'cloudflare-ab-testing' ),
+        function() {
+            echo '<p>' . esc_html__( 'Configure automatic plugin updates from GitHub releases.', 'cloudflare-ab-testing' ) . '</p>';
+        },
+        'cloudflare-ab-settings'
+    );
+
+    add_settings_field(
+        'cloudflare_ab_field_github_username',
+        __( 'GitHub Username', 'cloudflare-ab-testing' ),
+        'cloudflare_ab_field_github_updater_markup',
+        'cloudflare-ab-settings',
+        'cloudflare_ab_section_updates',
+        [ 'key' => 'github_username', 'label' => 'GitHub Username', 'help' => 'The GitHub username or organization that owns the repository' ]
+    );
+
+    add_settings_field(
+        'cloudflare_ab_field_github_repo',
+        __( 'GitHub Repository', 'cloudflare-ab-testing' ),
+        'cloudflare_ab_field_github_updater_markup',
+        'cloudflare-ab-settings',
+        'cloudflare_ab_section_updates',
+        [ 'key' => 'github_repo', 'label' => 'Repository Name', 'help' => 'The name of the GitHub repository (e.g., "cloudflare-ab-testing")' ]
+    );
+
+    add_settings_field(
+        'cloudflare_ab_field_github_token',
+        __( 'GitHub Token (Optional)', 'cloudflare-ab-testing' ),
+        'cloudflare_ab_field_github_updater_markup',
+        'cloudflare-ab-settings',
+        'cloudflare_ab_section_updates',
+        [ 'key' => 'github_token', 'label' => 'Personal Access Token', 'is_secret' => true, 'help' => 'Only required for private repositories. Create at GitHub Settings > Developer settings > Personal access tokens' ]
+    );
+
     // Remove the admin footer action as we're using standard WordPress sections
 }
 
@@ -150,6 +188,33 @@ function cloudflare_ab_field_cf_credentials_markup( $args ) {
         id="<?php echo esc_attr($field_id); ?>"
         name="cloudflare_ab_cloudflare_credentials[<?php echo esc_attr($key); ?>]" 
         value="<?php echo esc_attr( $value ); ?>" 
+        class="regular-text"
+        <?php echo !empty($value) ? 'required' : ''; ?>
+        data-tooltip="<?php echo isset( $args['help'] ) ? esc_attr( $args['help'] ) : ''; ?>"
+    >
+    <?php if ( isset( $args['help'] ) ): ?>
+        <p class="description"><?php echo esc_html( $args['help'] ); ?></p>
+    <?php endif; ?>
+    <?php if ( !empty($value) && $type === 'password' ) : ?>
+        <button type="button" class="button ab-copy-btn" data-target="#<?php echo esc_attr($field_id); ?>" style="margin-left: 10px;">
+            <?php esc_html_e( 'Copy', 'cloudflare-ab-testing' ); ?>
+        </button>
+    <?php endif; ?>
+    <?php
+}
+
+function cloudflare_ab_field_github_updater_markup( $args ) {
+    $updater_settings = get_option( 'cloudflare_ab_github_updater', [] );
+    $key = $args['key'];
+    $value = isset( $updater_settings[$key] ) ? $updater_settings[$key] : '';
+    $type = isset( $args['is_secret'] ) && $args['is_secret'] ? 'password' : 'text';
+    $field_id = 'cloudflare_ab_' . $key;
+    ?>
+    <input
+        type="<?php echo esc_attr($type); ?>"
+        id="<?php echo esc_attr($field_id); ?>"
+        name="cloudflare_ab_github_updater[<?php echo esc_attr($key); ?>]"
+        value="<?php echo esc_attr( $value ); ?>"
         class="regular-text"
         <?php echo !empty($value) ? 'required' : ''; ?>
         data-tooltip="<?php echo isset( $args['help'] ) ? esc_attr( $args['help'] ) : ''; ?>"
@@ -278,4 +343,3 @@ function cloudflare_ab_sanitize_urls( $input ) {
     }
     return implode( "\n", $out );
 }
-

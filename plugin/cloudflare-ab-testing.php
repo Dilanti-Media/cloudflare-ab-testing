@@ -3,7 +3,7 @@
  * Plugin Name:       Cloudflare A/B Testing
  * Plugin URI:        https://dilantimedia.com/
  * Description:       Provides A/B testing capabilities integrated with Cloudflare Workers.
- * Version:           1.2.0
+ * Version:           1.3.0
  * Author:            Dilanti Media
  * Author URI:        https://dilantimedia.com/
  * License:           GPL-2.0+
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit; // Exit if accessed directly
 }
 
-define( 'CLOUDFLARE_AB_TESTING_VERSION', '1.2.0' );
+define( 'CLOUDFLARE_AB_TESTING_VERSION', '1.3.0' );
 define( 'CLOUDFLARE_AB_TESTING_URL', plugin_dir_url( __FILE__ ) );
 
 // Include the new files
@@ -24,6 +24,28 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/shortcodes.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/cloudflare-api.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/worker-management.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/diagnostics.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/plugin-updater.php';
+
+// Initialize the plugin updater
+add_action( 'init', 'cloudflare_ab_init_updater' );
+function cloudflare_ab_init_updater() {
+    // Only check for updates in admin area
+    if ( is_admin() ) {
+        // Get GitHub settings from admin panel
+        $github_settings = get_option( 'cloudflare_ab_github_updater', [] );
+
+        // Only initialize if GitHub settings are configured
+        if ( !empty( $github_settings['github_username'] ) && !empty( $github_settings['github_repo'] ) ) {
+            new Cloudflare_AB_Plugin_Updater(
+                plugin_basename( __FILE__ ),                              // Plugin basename
+                $github_settings['github_username'],                     // GitHub username
+                $github_settings['github_repo'],                         // GitHub repository name
+                CLOUDFLARE_AB_TESTING_VERSION,                           // Current version
+                isset( $github_settings['github_token'] ) ? $github_settings['github_token'] : ''  // GitHub token
+            );
+        }
+    }
+}
 
 function cloudflare_ab_get_cookie_for_current_path() {
     $raw = get_option( 'cloudflare_ab_enabled_urls', '' );
