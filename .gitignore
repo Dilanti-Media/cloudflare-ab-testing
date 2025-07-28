@@ -2,3 +2,4 @@ wordpress
 .idea
 .env
 releases/
+.DS_Store

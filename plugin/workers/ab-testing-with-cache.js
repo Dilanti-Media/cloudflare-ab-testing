@@ -5,11 +5,12 @@ export default {
 };
 
 const CONFIG = {
-  TIMEOUT_MS: 30000,
+  TIMEOUT_MS: 10000, // Reduced from 30s to 10s to avoid Cloudflare limits
   COOKIE_MAX_AGE: 31536000, // 1 year
   VALID_VARIANTS: ['A', 'B'],
   MAX_COOKIE_SIZE: 8192,
-  REGISTRY_CACHE_TTL: 300 // 5 minutes
+  REGISTRY_CACHE_TTL: 300, // 5 minutes
+  KV_TIMEOUT_MS: 5000 // Timeout for KV operations
 };
 
 // Pre-compile regex and sets for performance
@@ -19,7 +20,11 @@ const STATIC_EXTENSIONS = new Set([
   'pdf', 'zip', 'ico', 'xml', 'txt'
 ]);
 
-const BYPASS_PATHS = ['/wp-admin/', '/wp-json/', '/wp-login', '/wp-content/', '/wp-includes/'];
+const BYPASS_PATHS = [
+  '/wp-admin/', '/wp-json/', '/wp-login', '/wp-content/', '/wp-includes/',
+  '/wp-cron.php', '/xmlrpc.php', '/wp-trackback.php', '/wp-comments-post.php',
+  '/wp-signup.php', '/wp-activate.php', '/wp-links-opml.php'
+];
 
 // Check KV namespace binding once at module load
 let kvNamespaceAvailable = null;
@@ -147,15 +152,28 @@ function shouldBypassProcessing(url, request) {
     }
   }
   
-  // Logged-in users (check cookies)
+  // Logged-in users and WordPress-specific cookies
   const cookies = request.headers.get('Cookie') || '';
-  if (cookies.includes('wordpress_logged_in_')) {
+  if (cookies.includes('wordpress_logged_in_') || 
+      cookies.includes('wp-postpass_') ||
+      cookies.includes('wordpress_test_cookie') ||
+      cookies.includes('comment_author_')) {
     return true;
   }
   
-  // Debug flags
-  if (url.searchParams.has('__cf_bypass_cache') || 
+  // WordPress-specific query parameters that should bypass cache/A-B testing
+  if (url.searchParams.has('preview') ||
+      url.searchParams.has('p') ||
+      url.searchParams.has('page_id') ||
+      url.searchParams.has('s') || // search
+      url.searchParams.has('customize_theme') ||
+      url.searchParams.has('__cf_bypass_cache') || 
       url.searchParams.has('nonitro')) {
+    return true;
+  }
+  
+  // POST requests (forms, comments, etc.)
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
     return true;
   }
   
@@ -202,7 +220,13 @@ async function getTestRegistry(env) {
       return [];
     }
     
-    const registry = await env.AB_TESTS_KV.get("registry", { type: "json" });
+    // Add timeout for KV operations
+    const kvPromise = env.AB_TESTS_KV.get("registry", { type: "json" });
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('KV timeout')), CONFIG.KV_TIMEOUT_MS)
+    );
+    
+    const registry = await Promise.race([kvPromise, timeoutPromise]);
     if (!registry || !Array.isArray(registry)) {
       logInfo('No valid registry found');
       // Cache empty result for shorter time to avoid hammering KV
@@ -266,8 +290,9 @@ async function handleABTestWithTimeout(request, url, test, env) {
       variant = generateVariant(request);
     }
     
-    // Add variant header for origin
+    // Add variant headers for origin (both specific and generic)
     headers.set('X-' + test.cookieName, variant);
+    headers.set('X-AB-Variant', variant);
     
     // Create modified request
     const modifiedRequest = new Request(request, { headers });
