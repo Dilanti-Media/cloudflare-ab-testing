@@ -365,7 +365,7 @@ function getVariantFromRequest(request, cookieName) {
   // Check cookie - more robust parsing with cached regex
   const cookies = request.headers.get('Cookie') || '';
   if (cookies) {
-    // Memory optimization: Consider periodic cleanup of cookieRegexCache
+    // Memory optimization: Clear cookieRegexCache when it exceeds 50 entries
     if (cookieRegexCache.size > 50) {
       cookieRegexCache.clear();
     }
