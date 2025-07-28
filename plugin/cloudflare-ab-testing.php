@@ -3,6 +3,7 @@
  * Plugin Name:       Cloudflare A/B Testing
  * Plugin URI:        https://dilantimedia.com/
  * Description:       Provides A/B testing capabilities integrated with Cloudflare Workers.
+<<<<<<< HEAD
  * Version:           1.3.0
  * Author:            Dilanti Media
  * Author URI:        https://dilantimedia.com/
