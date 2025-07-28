@@ -133,9 +133,11 @@ async function handleRequest(request, env, ctx) {
     });
   } catch (error) {
     logError('Worker error:', error);
-    const errorResponse = new Response('Internal Server Error', { status: 500 });
+    const errorResponse = new Response('Worker Error: Request Processing Failed', { status: 500 });
     const newHeaders = new Headers(errorResponse.headers);
     newHeaders.set('X-Worker-Duration', `${Date.now() - startTime}ms`);
+    if (error.name) newHeaders.set('X-Error-Name', error.name);
+    if (error.message) newHeaders.set('X-Error-Message', error.message);
     return new Response(errorResponse.body, {
       status: errorResponse.status,
       statusText: errorResponse.statusText,
