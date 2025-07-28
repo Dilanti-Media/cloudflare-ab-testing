@@ -1,6 +1,6 @@
 {
   "name": "cloudflare-ab-testing",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "description": "WordPress plugin for A/B testing using Cloudflare Workers",
   "scripts": {
     "test": "jest",

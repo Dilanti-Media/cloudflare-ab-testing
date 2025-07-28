@@ -28,12 +28,35 @@ fi
 
 # Get version from plugin file
 VERSION=$(grep "Version:" "$PLUGIN_DIR/cloudflare-ab-testing.php" | head -1 | awk -F': *' '{print $2}' | tr -d ' ')
+DEFINE_VERSION=$(grep "define.*CLOUDFLARE_AB_TESTING_VERSION" "$PLUGIN_DIR/cloudflare-ab-testing.php" | sed "s/.*'\([^']*\)'.*/\1/")
+
 if [ -z "$VERSION" ]; then
     echo -e "${RED}Error: Could not extract version from plugin file${NC}"
     exit 1
 fi
 
+# Check version consistency
+if [ "$VERSION" != "$DEFINE_VERSION" ]; then
+    echo -e "${RED}Error: Version mismatch in plugin file!${NC}"
+    echo -e "   Plugin header: $VERSION"
+    echo -e "   Define constant: $DEFINE_VERSION"
+    echo -e "${YELLOW}Run './scripts/version-sync.sh check' to fix this${NC}"
+    exit 1
+fi
+
 echo -e "${GREEN}Plugin version: $VERSION${NC}"
+
+# Check if this version already has a release
+EXISTING_RELEASE="$RELEASES_DIR/cloudflare-ab-testing-v$VERSION.zip"
+if [ -f "$EXISTING_RELEASE" ]; then
+    echo -e "${YELLOW}⚠️  Release already exists for version $VERSION${NC}"
+    read -p "Do you want to rebuild it? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo -e "${YELLOW}Build cancelled${NC}"
+        exit 0
+    fi
+fi
 
 # Create build directories
 mkdir -p "$BUILD_DIR"
@@ -51,6 +74,13 @@ echo -e "${YELLOW}Cleaning development files...${NC}"
 find "$BUILD_DIR/cloudflare-ab-testing" -name "*.log" -delete
 find "$BUILD_DIR/cloudflare-ab-testing" -name ".DS_Store" -delete
 find "$BUILD_DIR/cloudflare-ab-testing" -name "Thumbs.db" -delete
+
+# Update readme.txt with current version
+if [ -f "$BUILD_DIR/cloudflare-ab-testing/readme.txt" ]; then
+    echo -e "${YELLOW}Updating readme.txt version...${NC}"
+    sed -i.bak "s/Stable tag: .*/Stable tag: $VERSION/" "$BUILD_DIR/cloudflare-ab-testing/readme.txt"
+    rm -f "$BUILD_DIR/cloudflare-ab-testing/readme.txt.bak"
+fi
 
 # Create WordPress readme.txt if it doesn't exist
 if [ ! -f "$BUILD_DIR/cloudflare-ab-testing/readme.txt" ]; then
@@ -106,30 +136,39 @@ EOF
 fi
 
 # Create zip file
-PLUGIN_ZIP="cloudflare-ab-testing-v$VERSION.zip"
-echo -e "${YELLOW}Creating zip file: $PLUGIN_ZIP${NC}"
-
+echo -e "${YELLOW}Creating zip file...${NC}"
 cd "$BUILD_DIR"
-zip -r "$RELEASES_DIR/$PLUGIN_ZIP" cloudflare-ab-testing/ -q
+ZIP_NAME="cloudflare-ab-testing-v$VERSION.zip"
+zip -r "$ZIP_NAME" cloudflare-ab-testing/ -x "*.git*" "*.svn*" "node_modules/*"
 
-# Calculate file size
-SIZE=$(ls -lh "$RELEASES_DIR/$PLUGIN_ZIP" | awk '{print $5}')
+# Move to releases directory
+mv "$ZIP_NAME" "$RELEASES_DIR/"
+
+# Create latest symlink for easy access
+cd "$RELEASES_DIR"
+rm -f cloudflare-ab-testing-latest.zip
+ln -s "$ZIP_NAME" cloudflare-ab-testing-latest.zip
 
 echo -e "${GREEN}✓ Plugin built successfully!${NC}"
-echo -e "${GREEN}  File: $RELEASES_DIR/$PLUGIN_ZIP${NC}"
-echo -e "${GREEN}  Size: $SIZE${NC}"
-echo -e "${GREEN}  Version: $VERSION${NC}"
+echo -e "${GREEN}✓ Release file: $RELEASES_DIR/$ZIP_NAME${NC}"
+echo -e "${GREEN}✓ Latest symlink: $RELEASES_DIR/cloudflare-ab-testing-latest.zip${NC}"
 
-# Create latest symlink
-cd "$RELEASES_DIR"
-ln -sf "$PLUGIN_ZIP" "cloudflare-ab-testing-latest.zip"
+# Cleanup
+rm -rf "$BUILD_DIR/cloudflare-ab-testing"
 
-echo -e "${GREEN}✓ Latest symlink created${NC}"
+# GitHub Release Instructions
+echo -e "\n${YELLOW}=== GitHub Release Instructions ===${NC}"
+echo -e "1. Create a new release on GitHub with tag: ${GREEN}v$VERSION${NC}"
+echo -e "2. Upload the zip file: ${GREEN}$RELEASES_DIR/$ZIP_NAME${NC}"
+echo -e "3. Add release notes describing changes in this version"
+echo -e "4. Set as the latest release for auto-updater compatibility"
+echo -e "\n${YELLOW}=== Auto-updater Configuration ===${NC}"
+echo -e "Users need to configure these settings in WordPress admin:"
+echo -e "• GitHub Username: ${GREEN}[your-github-username]${NC}"
+echo -e "• GitHub Repository: ${GREEN}[your-repo-name]${NC}"
+echo -e "• GitHub Token: ${GREEN}[optional-for-private-repos]${NC}"
 
-# Clean up build directory
-rm -rf "$BUILD_DIR"
-
-echo -e "${GREEN}✓ Build complete!${NC}"
+echo -e "\n${GREEN}Build complete!${NC}"
 echo ""
 echo -e "${YELLOW}Installation instructions:${NC}"
 echo -e "1. Download: $RELEASES_DIR/$PLUGIN_ZIP"
