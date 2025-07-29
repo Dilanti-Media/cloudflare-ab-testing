@@ -59,7 +59,14 @@ function cloudflare_ab_register_settings() {
     register_setting( 'cloudflare_ab_options_group', 'cloudflare_ab_cloudflare_credentials' );
     register_setting( 'cloudflare_ab_options_group', 'cloudflare_ab_worker_version' );
     register_setting( 'cloudflare_ab_options_group', 'cloudflare_ab_github_updater' );
-    register_setting( 'cloudflare_ab_options_group', 'cloudflare_ab_ga4_settings' );
+    register_setting( 'cloudflare_ab_options_group', 'cloudflare_ab_ga4_settings', [
+        'sanitize_callback' => 'cloudflare_ab_sanitize_ga4_settings',
+        'default' => [
+            'enabled' => false,
+            'event_name' => 'abVariantInit',
+            'custom_dimensions' => ''
+        ]
+    ]);
 
     // --- Section: Test Configuration ---
     add_settings_section(
@@ -192,23 +199,6 @@ function cloudflare_ab_register_settings() {
 
     // Remove the admin footer action as we're using standard WordPress sections
 }
-
-// Register GA4 settings
-register_setting( 'cloudflare-ab-settings', 'cloudflare_ab_ga4_settings', [
-    'sanitize_callback' => 'cloudflare_ab_sanitize_ga4_settings',
-    'default' => [
-        'enabled' => false,
-        'event_name' => 'abVariantInit',
-        'custom_dimensions' => ''
-    ]
-]);
-
-/**
- * Sanitize GA4 settings
- * 
- * @param array $input Raw input data from form
- * @return array Sanitized settings array
- */
 function cloudflare_ab_sanitize_ga4_settings( $input ) {
     $sanitized = [];
 
