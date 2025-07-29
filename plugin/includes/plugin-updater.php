@@ -162,7 +162,7 @@ class Cloudflare_AB_Plugin_Updater {
             $version = $this->version;
         }
 
-        set_transient( 'cloudflare_ab_remote_version', $version, HOUR_IN_SECONDS * 1 );
+        set_transient( 'cloudflare_ab_remote_version', $version, HOUR_IN_SECONDS * 3 );
         return $version;
     }
 
@@ -206,7 +206,7 @@ class Cloudflare_AB_Plugin_Updater {
             return array();
         }
 
-        set_transient( 'cloudflare_ab_remote_info', $info, HOUR_IN_SECONDS * 1 );
+        set_transient( 'cloudflare_ab_remote_info', $info, HOUR_IN_SECONDS * 3 );
         return $info;
     }
 
