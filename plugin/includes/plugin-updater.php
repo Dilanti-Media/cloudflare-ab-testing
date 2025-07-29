@@ -76,7 +76,6 @@ class Cloudflare_AB_Plugin_Updater {
             'author' => 'Dilanti Media',
             'author_profile' => 'https://dilantimedia.com/',
             'homepage' => $this->get_github_repo_url(),
-            $download_url = $this->get_download_url( $remote_version );
             'download_link' => $download_url,
             'package' => $download_url,
             'sections' => array(
