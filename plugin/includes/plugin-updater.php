@@ -162,7 +162,7 @@ class Cloudflare_AB_Plugin_Updater {
             $version = $this->version;
         }
 
-        set_transient( 'cloudflare_ab_remote_version', $version, HOUR_IN_SECONDS * 3 );
+        set_transient( 'cloudflare_ab_remote_version', $version, HOUR_IN_SECONDS * 1 );
         return $version;
     }
 
