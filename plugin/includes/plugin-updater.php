@@ -74,8 +74,10 @@ class Cloudflare_AB_Plugin_Updater {
             'slug' => $this->plugin_slug,
             'version' => $remote_version,
             'author' => 'Dilanti Media',
+            'author_profile' => 'https://dilantimedia.com/',
             'homepage' => $this->get_github_repo_url(),
             'download_link' => $this->get_download_url( $remote_version ),
+            'package' => $this->get_download_url( $remote_version ),
             'sections' => array(
                 'description' => 'Provides A/B testing capabilities integrated with Cloudflare Workers.',
                 'changelog' => $this->get_changelog( $remote_info ),
@@ -84,6 +86,8 @@ class Cloudflare_AB_Plugin_Updater {
             'tested' => '6.8.2',
             'requires_php' => '7.4',
             'last_updated' => $remote_info['published_at'] ?? date( 'Y-m-d H:i:s' ),
+            'download_count' => $remote_info['download_count'] ?? 1,
+            'stable_tag' => $remote_version,
         );
     }
 
@@ -158,7 +162,7 @@ class Cloudflare_AB_Plugin_Updater {
             $version = $this->version;
         }
 
-        set_transient( 'cloudflare_ab_remote_version', $version, HOUR_IN_SECONDS * 6 );
+        set_transient( 'cloudflare_ab_remote_version', $version, HOUR_IN_SECONDS * 1 );
         return $version;
     }
 
@@ -202,7 +206,7 @@ class Cloudflare_AB_Plugin_Updater {
             return array();
         }
 
-        set_transient( 'cloudflare_ab_remote_info', $info, HOUR_IN_SECONDS * 6 );
+        set_transient( 'cloudflare_ab_remote_info', $info, HOUR_IN_SECONDS * 1 );
         return $info;
     }
 
