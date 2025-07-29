@@ -87,7 +87,7 @@ class Cloudflare_AB_Plugin_Updater {
             'tested' => '6.8.2',
             'requires_php' => '7.4',
             'last_updated' => $remote_info['published_at'] ?? date( 'Y-m-d H:i:s' ),
-            'download_count' => $remote_info['download_count'] ?? 1,
+            'download_count' => $remote_info['download_count'] ?? 0,
             'stable_tag' => $remote_version,
         );
     }
