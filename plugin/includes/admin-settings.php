@@ -165,7 +165,7 @@ function cloudflare_ab_register_settings() {
         'cloudflare_ab_section_updates',
         __( 'Plugin Updates', 'cloudflare-ab-testing' ),
         function() {
-            echo '<p>' . esc_html__( 'Configure automatic plugin updates from GitHub releases.', 'cloudflare-ab-testing' ) . '</p>';
+            echo '<p>' . esc_html__( 'Configure automatic plugin updates from GitHub releases. Leave fields empty to use the official Dilanti-Media/cloudflare-ab-testing repository.', 'cloudflare-ab-testing' ) . '</p>';
         },
         'cloudflare-ab-settings'
     );
@@ -176,7 +176,11 @@ function cloudflare_ab_register_settings() {
         'cloudflare_ab_field_github_updater_markup',
         'cloudflare-ab-settings',
         'cloudflare_ab_section_updates',
-        [ 'key' => 'github_username', 'label' => 'GitHub Username', 'help' => 'The GitHub username or organization that owns the repository' ]
+        [ 
+            'key' => 'github_username', 
+            'label' => 'GitHub Username', 
+            'help' => 'The GitHub username or organization (leave blank for Dilanti-Media)' 
+        ]
     );
 
     add_settings_field(
@@ -185,7 +189,11 @@ function cloudflare_ab_register_settings() {
         'cloudflare_ab_field_github_updater_markup',
         'cloudflare-ab-settings',
         'cloudflare_ab_section_updates',
-        [ 'key' => 'github_repo', 'label' => 'Repository Name', 'help' => 'The name of the GitHub repository (e.g., "cloudflare-ab-testing")' ]
+        [ 
+            'key' => 'github_repo', 
+            'label' => 'Repository Name', 
+            'help' => 'Repository name (leave blank for cloudflare-ab-testing)' 
+        ]
     );
 
     add_settings_field(
@@ -358,7 +366,10 @@ function cloudflare_ab_field_github_updater_markup( $args ) {
         name="cloudflare_ab_github_updater[<?php echo esc_attr($key); ?>]"
         value="<?php echo esc_attr( $value ); ?>"
         class="regular-text"
-        <?php echo !empty($value) ? 'required' : ''; ?>
+        <?php echo 
+            $key === 'github_username' && empty($value) ? 'placeholder="Dilanti-Media"' : 
+            ($key === 'github_repo' && empty($value) ? 'placeholder="cloudflare-ab-testing"' : '') 
+        ?>
         data-tooltip="<?php echo isset( $args['help'] ) ? esc_attr( $args['help'] ) : ''; ?>"
     >
     <?php if ( isset( $args['help'] ) ): ?>
