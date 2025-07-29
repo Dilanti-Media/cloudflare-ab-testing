@@ -81,7 +81,7 @@ class Cloudflare_AB_Plugin_Updater {
                 'changelog' => $this->get_changelog( $remote_info ),
             ),
             'requires' => '5.0',
-            'tested' => get_bloginfo( 'version' ),
+            'tested' => '6.8.2',
             'requires_php' => '7.4',
             'last_updated' => $remote_info['published_at'] ?? date( 'Y-m-d H:i:s' ),
         );
@@ -152,6 +152,11 @@ class Cloudflare_AB_Plugin_Updater {
 
         $info = $this->get_remote_info();
         $version = isset( $info['tag_name'] ) ? ltrim( $info['tag_name'], 'v' ) : $this->version;
+        
+        // Ensure we have a valid version number
+        if ( empty( $version ) || $version === $this->version ) {
+            $version = $this->version;
+        }
 
         set_transient( 'cloudflare_ab_remote_version', $version, HOUR_IN_SECONDS * 6 );
         return $version;
@@ -216,7 +221,7 @@ class Cloudflare_AB_Plugin_Updater {
             }
         }
 
-        // Fallback to GitHub's auto-generated zip
+        // Fallback to GitHub's auto-generated zip (for backwards compatibility)
         return sprintf(
             'https://github.com/%s/%s/archive/refs/tags/v%s.zip',
             $this->github_username,
