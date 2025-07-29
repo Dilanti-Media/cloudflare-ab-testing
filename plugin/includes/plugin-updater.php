@@ -76,8 +76,8 @@ class Cloudflare_AB_Plugin_Updater {
             'author' => 'Dilanti Media',
             'author_profile' => 'https://dilantimedia.com/',
             'homepage' => $this->get_github_repo_url(),
-            'download_link' => $download_url,
-            'package' => $download_url,
+            'download_link' => $this->get_download_url( $remote_version ),
+            'package' => $this->get_download_url( $remote_version ),
             'sections' => array(
                 'description' => 'Provides A/B testing capabilities integrated with Cloudflare Workers.',
                 'changelog' => $this->get_changelog( $remote_info ),
