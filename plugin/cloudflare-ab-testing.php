@@ -3,7 +3,6 @@
  * Plugin Name:       Cloudflare A/B Testing
  * Plugin URI:        https://dilantimedia.com/
  * Description:       Provides A/B testing capabilities integrated with Cloudflare Workers.
-<<<<<<< HEAD
  * Version:           1.3.0
  * Author:            Dilanti Media
  * Author URI:        https://dilantimedia.com/
@@ -38,11 +37,11 @@ function cloudflare_ab_init_updater() {
         // Only initialize if GitHub settings are configured
         if ( !empty( $github_settings['github_username'] ) && !empty( $github_settings['github_repo'] ) ) {
             new Cloudflare_AB_Plugin_Updater(
-                plugin_basename( __FILE__ ),                              // Plugin basename
-                $github_settings['github_username'],                     // GitHub username
-                $github_settings['github_repo'],                         // GitHub repository name
-                CLOUDFLARE_AB_TESTING_VERSION,                           // Current version
-                isset( $github_settings['github_token'] ) ? $github_settings['github_token'] : ''  // GitHub token
+                plugin_basename( __FILE__ ),
+                $github_settings['github_username'],
+                $github_settings['github_repo'],
+                CLOUDFLARE_AB_TESTING_VERSION,
+                isset( $github_settings['github_token'] ) ? $github_settings['github_token'] : ''
             );
         }
     }
@@ -68,18 +67,20 @@ function cloudflare_ab_get_cookie_for_current_path() {
     return null;
 }
 
+// Enqueue scripts and styles
 add_action( 'wp_enqueue_scripts', 'cloudflare_ab_enqueue_assets' );
 add_action( 'admin_enqueue_scripts', 'cloudflare_ab_enqueue_admin_assets' );
 add_action( 'wp_ajax_cloudflare_ab_save_worker_version', 'cloudflare_ab_save_worker_version' );
+
 function cloudflare_ab_enqueue_assets() {
-    // Force no-caching headers for debugging
-    if ( ! headers_sent() ) {
+    // Force no-caching headers for debugging (only when debug mode is enabled)
+    if ( ! headers_sent() && ( ( defined( 'WP_DEBUG' ) && WP_DEBUG ) || ( is_user_logged_in() && current_user_can( 'manage_options' ) ) ) ) {
         header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
         header("Pragma: no-cache");
         header("Expires: 0");
     }
 
-    // Enqueue JS
+    // Enqueue main JS
     wp_enqueue_script(
         'cloudflare-ab-testing-script',
         CLOUDFLARE_AB_TESTING_URL . 'assets/js/cloudflare-ab-testing.js',
@@ -88,10 +89,11 @@ function cloudflare_ab_enqueue_assets() {
         true
     );
 
-    // Pass PHP data to JS
+    // Prepare test configuration
     $raw_urls = get_option( 'cloudflare_ab_enabled_urls', '' );
     $lines = array_filter( array_map( 'trim', preg_split( '/[\r\n]+/', $raw_urls ) ) );
     $tests = [];
+
     foreach ( $lines as $line ) {
         if ( strpos( $line, '|' ) === false ) continue;
         list( $slug_part, $paths_part ) = array_map( 'trim', explode( '|', $line, 2 ) );
@@ -107,14 +109,36 @@ function cloudflare_ab_enqueue_assets() {
             'cookieName' => 'AB_' . strtoupper( str_replace( '-', '_', $slug ) ),
         ];
     }
-    wp_localize_script( 'cloudflare-ab-testing-script', 'cloudflareAbTesting', [ 
+
+    // Get GA4 settings for JavaScript
+    $ga4_settings = get_option( 'cloudflare_ab_ga4_settings', [] );
+    $ga4_enabled = isset( $ga4_settings['enabled'] ) ? (bool) $ga4_settings['enabled'] : false;
+    
+    $js_config = [
         'registry' => $tests,
         'debug' => ( ( is_user_logged_in() && current_user_can( 'manage_options' ) ) || ( defined( 'WP_DEBUG' ) && WP_DEBUG ) )
-    ] );
+    ];
     
-    // Add PHP debug output for logged-in users or when debug mode is enabled
-    if ( ( is_user_logged_in() && current_user_can( 'manage_options' ) ) || ( defined( 'WP_DEBUG' ) && WP_DEBUG ) ) {
-        cloudflare_ab_add_debug_output( $tests );
+    // Add GA4 configuration if enabled
+    if ( $ga4_enabled ) {
+        $js_config['ga4'] = [
+            'enabled' => true,
+            'event_name' => !empty( $ga4_settings['event_name'] ) ? $ga4_settings['event_name'] : 'abVariantInit',
+            'custom_dimensions' => !empty( $ga4_settings['custom_dimensions'] ) ? $ga4_settings['custom_dimensions'] : '',
+        ];
+    }
+    
+    wp_localize_script( 'cloudflare-ab-testing-script', 'cloudflareAbTesting', $js_config );
+    
+    // Enqueue GA4 tracking script if enabled
+    if ( $ga4_enabled ) {
+        wp_enqueue_script(
+            'cloudflare-ab-tracking',
+            CLOUDFLARE_AB_TESTING_URL . 'assets/js/cloudflare-ab-tracking.js',
+            [],
+            CLOUDFLARE_AB_TESTING_VERSION,
+            true
+        );
     }
 
     // Enqueue basic inline styles for demo buttons
@@ -192,44 +216,4 @@ function cloudflare_ab_maybe_initialize_defaults() {
         $default_config = "homepage_test|/,/home";
         update_option( 'cloudflare_ab_enabled_urls', $default_config );
     }
-}
-
-function cloudflare_ab_add_debug_output( $tests ) {
-    $current_path = wp_parse_url( $_SERVER['REQUEST_URI'], PHP_URL_PATH );
-    $active_tests = [];
-    
-    foreach ( $tests as $test ) {
-        if ( in_array( $current_path, $test['paths'], true ) ) {
-            $cookie_name = $test['cookieName'];
-            $variant = 'A'; // Default
-            
-            // Check for variant in various sources
-            if ( !empty( $_GET[$cookie_name] ) ) {
-                $variant = sanitize_key( $_GET[$cookie_name] );
-                $source = 'URL Parameter';
-            } elseif ( !empty( $_SERVER['HTTP_X_AB_VARIANT'] ) ) {
-                $variant = sanitize_key( $_SERVER['HTTP_X_AB_VARIANT'] );
-                $source = 'Cloudflare Worker Header (X-AB-Variant)';
-            } elseif ( !empty( $_SERVER['HTTP_X_' . strtoupper($cookie_name)] ) ) {
-                $variant = sanitize_key( $_SERVER['HTTP_X_' . strtoupper($cookie_name)] );
-                $source = 'Worker Header';
-            } elseif ( !empty( $_COOKIE[$cookie_name] ) ) {
-                $variant = sanitize_key( $_COOKIE[$cookie_name] );
-                $source = 'Cookie';
-            } else {
-                $source = 'Default';
-            }
-            
-            $active_tests[] = [
-                'test' => $test['test'],
-                'variant' => $variant,
-                'source' => $source,
-                'cookie_name' => $cookie_name,
-                'path' => $current_path
-            ];
-        }
-    }
-    
-    // Debug output removed to avoid confusion from timing mismatches
-    // and stale cookie/header values
 }

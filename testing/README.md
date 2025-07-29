@@ -155,6 +155,18 @@ SQUID_PROXY_PASSWORD=your_password
    - Check variant assignment consistency
    - Review worker header passing logic
 
+### Debug Mode
+
+Enable debug output for detailed information:
+```bash
+# Set debug mode
+export DEBUG=true
+node test-ab-complete.js
+
+# Or inline
+DEBUG=true node test-ab-complete.js
+```
+
 ## 🔄 Integration with Development Workflow
 
 ### Pre-Release Testing

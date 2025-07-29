@@ -59,6 +59,7 @@ function cloudflare_ab_register_settings() {
     register_setting( 'cloudflare_ab_options_group', 'cloudflare_ab_cloudflare_credentials' );
     register_setting( 'cloudflare_ab_options_group', 'cloudflare_ab_worker_version' );
     register_setting( 'cloudflare_ab_options_group', 'cloudflare_ab_github_updater' );
+    register_setting( 'cloudflare_ab_options_group', 'cloudflare_ab_ga4_settings' );
 
     // --- Section: Test Configuration ---
     add_settings_section(
@@ -115,6 +116,43 @@ function cloudflare_ab_register_settings() {
         [ 'key' => 'api_token', 'label' => 'API Token', 'is_secret' => true, 'help' => 'Create this at My Profile > API Tokens with "Account:Zone:Read" and "Account:Cloudflare Workers:Edit" permissions' ]
     );
 
+    // --- Section: GA4 Tracking ---
+    add_settings_section(
+        'cloudflare_ab_section_ga4',
+        __( 'Google Analytics 4 Integration', 'cloudflare-ab-testing' ),
+        function() {
+            echo '<p>' . esc_html__( 'Configure GA4 tracking for A/B testing analytics.', 'cloudflare-ab-testing' ) . '</p>';
+        },
+        'cloudflare-ab-settings'
+    );
+
+    add_settings_field(
+        'cloudflare_ab_field_ga4_enabled',
+        __( 'Enable GA4 Tracking', 'cloudflare-ab-testing' ),
+        'cloudflare_ab_field_ga4_enabled_markup',
+        'cloudflare-ab-settings',
+        'cloudflare_ab_section_ga4',
+        [ 'help' => 'Enable automatic GA4 event tracking for A/B test variants' ]
+    );
+
+    add_settings_field(
+        'cloudflare_ab_field_ga4_event_name',
+        __( 'Custom Event Name', 'cloudflare-ab-testing' ),
+        'cloudflare_ab_field_ga4_markup',
+        'cloudflare-ab-settings',
+        'cloudflare_ab_section_ga4',
+        [ 'key' => 'event_name', 'label' => 'Event Name', 'help' => 'GA4 custom event name for tracking variants (default: abVariantInit)' ]
+    );
+
+    add_settings_field(
+        'cloudflare_ab_field_ga4_custom_dimensions',
+        __( 'Custom Dimensions', 'cloudflare-ab-testing' ),
+        'cloudflare_ab_field_ga4_custom_dims_markup',
+        'cloudflare-ab-settings',
+        'cloudflare_ab_section_ga4',
+        [ 'help' => 'Additional custom dimension names to track (comma-separated)' ]
+    );
+
     // --- Section: Plugin Updates ---
     add_settings_section(
         'cloudflare_ab_section_updates',
@@ -153,6 +191,61 @@ function cloudflare_ab_register_settings() {
     );
 
     // Remove the admin footer action as we're using standard WordPress sections
+}
+
+// Register GA4 settings
+register_setting( 'cloudflare-ab-settings', 'cloudflare_ab_ga4_settings', [
+    'sanitize_callback' => 'cloudflare_ab_sanitize_ga4_settings',
+    'default' => [
+        'enabled' => false,
+        'event_name' => 'abVariantInit',
+        'custom_dimensions' => ''
+    ]
+]);
+
+/**
+ * Sanitize GA4 settings
+ * 
+ * @param array $input Raw input data from form
+ * @return array Sanitized settings array
+ */
+function cloudflare_ab_sanitize_ga4_settings( $input ) {
+    $sanitized = [];
+
+    // Sanitize enabled field
+    $sanitized['enabled'] = isset( $input['enabled'] ) ? (bool) $input['enabled'] : false;
+
+    // Sanitize event name
+    if ( isset( $input['event_name'] ) && !empty( $input['event_name'] ) ) {
+        // GA4 event names must be alphanumeric with underscores, max 40 chars
+        $event_name = preg_replace( '/[^a-zA-Z0-9_]/', '_', $input['event_name'] );
+        $event_name = substr( $event_name, 0, 40 );
+        $sanitized['event_name'] = $event_name;
+    } else {
+        $sanitized['event_name'] = 'abVariantInit';
+    }
+
+    // Sanitize custom dimensions
+    if ( isset( $input['custom_dimensions'] ) ) {
+        $dimensions = array_map( 'trim', explode( ',', $input['custom_dimensions'] ) );
+        $valid_dimensions = [];
+
+        foreach ( $dimensions as $dimension ) {
+            // GA4 parameter names must be alphanumeric with underscores, max 40 chars
+            $clean_dimension = preg_replace( '/[^a-zA-Z0-9_]/', '_', $dimension );
+            $clean_dimension = substr( $clean_dimension, 0, 40 );
+
+            if ( !empty( $clean_dimension ) && strlen( $clean_dimension ) >= 1 ) {
+                $valid_dimensions[] = $clean_dimension;
+            }
+        }
+
+        $sanitized['custom_dimensions'] = implode( ', ', array_unique( $valid_dimensions ) );
+    } else {
+        $sanitized['custom_dimensions'] = '';
+    }
+
+    return $sanitized;
 }
 
 function cloudflare_ab_field_urls_markup() {
@@ -200,6 +293,65 @@ function cloudflare_ab_field_cf_credentials_markup( $args ) {
             <?php esc_html_e( 'Copy', 'cloudflare-ab-testing' ); ?>
         </button>
     <?php endif; ?>
+    <?php
+}
+
+function cloudflare_ab_field_ga4_enabled_markup() {
+    $ga4_settings = get_option( 'cloudflare_ab_ga4_settings', [] );
+    $enabled = isset( $ga4_settings['enabled'] ) ? (bool) $ga4_settings['enabled'] : false;
+    ?>
+    <label>
+        <input
+            type="checkbox"
+            id="cloudflare_ab_ga4_enabled"
+            name="cloudflare_ab_ga4_settings[enabled]"
+            value="1"
+            <?php checked( $enabled ); ?>
+        />
+        <?php esc_html_e( 'Enable Google Analytics 4 tracking for A/B test variants', 'cloudflare-ab-testing' ); ?>
+    </label>
+    <p class="description">
+        <?php esc_html_e( 'Automatically tracks A/B test variants in your GA4 account using custom events.', 'cloudflare-ab-testing' ); ?>
+    </p>
+    <?php
+}
+
+function cloudflare_ab_field_ga4_markup( $args ) {
+    $ga4_settings = get_option( 'cloudflare_ab_ga4_settings', [] );
+    $key = $args['key'];
+    $value = isset( $ga4_settings[$key] ) ? $ga4_settings[$key] : '';
+    $placeholder = ($key === 'event_name') ? 'abVariantInit' : '';
+    ?>
+    <input
+        type="text"
+        id="cloudflare_ab_<?php echo esc_attr($key); ?>"
+        name="cloudflare_ab_ga4_settings[<?php echo esc_attr($key); ?>]"
+        value="<?php echo esc_attr( $value ); ?>"
+        class="regular-text"
+        placeholder="<?php echo esc_attr( $placeholder ); ?>"
+        data-tooltip="<?php echo isset( $args['help'] ) ? esc_attr( $args['help'] ) : ''; ?>"
+    >
+    <?php if ( isset( $args['help'] ) ): ?>
+        <p class="description"><?php echo esc_html( $args['help'] ); ?></p>
+    <?php endif; ?>
+    <?php
+}
+
+function cloudflare_ab_field_ga4_custom_dims_markup() {
+    $ga4_settings = get_option( 'cloudflare_ab_ga4_settings', [] );
+    $value = isset( $ga4_settings['custom_dimensions'] ) ? $ga4_settings['custom_dimensions'] : '';
+    ?>
+    <input
+        type="text"
+        id="cloudflare_ab_ga4_custom_dimensions"
+        name="cloudflare_ab_ga4_settings[custom_dimensions]"
+        value="<?php echo esc_attr( $value ); ?>"
+        class="regular-text"
+        placeholder="<?php esc_attr_e( 'e.g. ab_session, variation_source, experiment_name', 'cloudflare-ab-testing' ); ?>"
+    >
+    <p class="description">
+        <?php esc_html_e( 'Custom dimension names for advanced tracking (comma-separated)', 'cloudflare-ab-testing' ); ?>
+    </p>
     <?php
 }
 
