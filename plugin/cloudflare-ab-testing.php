@@ -34,16 +34,18 @@ function cloudflare_ab_init_updater() {
         // Get GitHub settings from admin panel
         $github_settings = get_option( 'cloudflare_ab_github_updater', [] );
 
-        // Only initialize if GitHub settings are configured
-        if ( !empty( $github_settings['github_username'] ) && !empty( $github_settings['github_repo'] ) ) {
-            new Cloudflare_AB_Plugin_Updater(
-                plugin_basename( __FILE__ ),
-                $github_settings['github_username'],
-                $github_settings['github_repo'],
-                CLOUDFLARE_AB_TESTING_VERSION,
-                isset( $github_settings['github_token'] ) ? $github_settings['github_token'] : ''
-            );
-        }
+        // Use defaults if empty, or use configured settings
+        $github_username = !empty($github_settings['github_username']) ? $github_settings['github_username'] : 'Dilanti-Media';
+        $github_repo = !empty($github_settings['github_repo']) ? $github_settings['github_repo'] : 'cloudflare-ab-testing';
+
+        // Always initialize with defaults or custom settings
+        new Cloudflare_AB_Plugin_Updater(
+            plugin_basename( __FILE__ ),
+            $github_username,
+            $github_repo,
+            CLOUDFLARE_AB_TESTING_VERSION,
+            isset( $github_settings['github_token'] ) ? $github_settings['github_token'] : ''
+        );
     }
 }
 
