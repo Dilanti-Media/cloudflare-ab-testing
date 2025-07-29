@@ -225,7 +225,7 @@ function cloudflare_ab_sanitize_ga4_settings( $input ) {
             $clean_dimension = preg_replace( '/[^a-zA-Z0-9_]/', '_', $dimension );
             $clean_dimension = substr( $clean_dimension, 0, 40 );
 
-            if ( !empty( $clean_dimension ) && strlen( $clean_dimension ) >= 1 ) {
+            if ( !empty( $clean_dimension ) ) {
                 $valid_dimensions[] = $clean_dimension;
             }
         }
