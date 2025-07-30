@@ -42,16 +42,27 @@ class Cloudflare_AB_Plugin_Updater {
         // Get remote version
         $remote_version = $this->get_remote_version();
 
+        // Ensure we have a valid version that's different from current
+        if ( empty( $remote_version ) || $remote_version === $this->version ) {
+            return $transient;
+        }
+
         // If remote version is newer, add to update queue
         if ( version_compare( $this->version, $remote_version, '<' ) ) {
-            $transient->response[ $this->plugin_basename ] = array(
+            $remote_info = $this->get_remote_info();
+            $compatibility_info = $this->extract_compatibility_info( $remote_info );
+            
+            $transient->response[ $this->plugin_basename ] = (object) array(
                 'slug' => $this->plugin_slug,
                 'plugin' => $this->plugin_basename,
                 'new_version' => $remote_version,
                 'url' => $this->get_github_repo_url(),
                 'package' => $this->get_download_url( $remote_version ),
-                'tested' => get_bloginfo( 'version' ),
-                'compatibility' => array()
+                'tested' => $compatibility_info['tested'] ?? '6.8.2',
+                'requires' => $compatibility_info['requires'] ?? '5.0',
+                'requires_php' => $compatibility_info['requires_php'] ?? '7.4',
+                'compatibility' => array(),
+                'upgrade_notice' => $this->get_upgrade_notice( $remote_info )
             );
         }
 
@@ -69,6 +80,9 @@ class Cloudflare_AB_Plugin_Updater {
         $remote_version = $this->get_remote_version();
         $remote_info = $this->get_remote_info();
 
+        // Extract compatibility info from release body if available
+        $compatibility_info = $this->extract_compatibility_info( $remote_info );
+
         return (object) array(
             'name' => 'Cloudflare A/B Testing',
             'slug' => $this->plugin_slug,
@@ -82,12 +96,13 @@ class Cloudflare_AB_Plugin_Updater {
                 'description' => 'Provides A/B testing capabilities integrated with Cloudflare Workers.',
                 'changelog' => $this->get_changelog( $remote_info ),
             ),
-            'requires' => '5.0',
-            'tested' => '6.8.2',
-            'requires_php' => '7.4',
+            'requires' => $compatibility_info['requires'] ?? '5.0',
+            'tested' => $compatibility_info['tested'] ?? '6.8.2',
+            'requires_php' => $compatibility_info['requires_php'] ?? '7.4',
             'last_updated' => $remote_info['published_at'] ?? date( 'Y-m-d H:i:s' ),
             'download_count' => $remote_info['download_count'] ?? 0,
             'stable_tag' => $remote_version,
+            'upgrade_notice' => $this->get_upgrade_notice( $remote_info ),
         );
     }
 
@@ -155,10 +170,10 @@ class Cloudflare_AB_Plugin_Updater {
         }
 
         $info = $this->get_remote_info();
-        $version = isset( $info['tag_name'] ) ? ltrim( $info['tag_name'], 'v' ) : $this->version;
+        $version = isset( $info['tag_name'] ) ? ltrim( $info['tag_name'], 'v' ) : '';
         
         // Ensure we have a valid version number
-        if ( empty( $version ) || $version === $this->version ) {
+        if ( empty( $version ) || !preg_match('/^\d+\.\d+(\.\d+)?/', $version) ) {
             $version = $this->version;
         }
 
@@ -196,6 +211,7 @@ class Cloudflare_AB_Plugin_Updater {
         $response = wp_remote_get( $url, $args );
 
         if ( is_wp_error( $response ) ) {
+            error_log('Cloudflare A/B Testing: Failed to fetch release info - ' . $response->get_error_message());
             return array();
         }
 
@@ -203,6 +219,13 @@ class Cloudflare_AB_Plugin_Updater {
         $info = json_decode( $body, true );
 
         if ( ! is_array( $info ) ) {
+            error_log('Cloudflare A/B Testing: Failed to parse release info - Invalid JSON response');
+            return array();
+        }
+
+        // Ensure we have required fields
+        if ( ! isset( $info['tag_name'] ) ) {
+            error_log('Cloudflare A/B Testing: Invalid GitHub API response - missing tag_name');
             return array();
         }
 
@@ -254,5 +277,58 @@ class Cloudflare_AB_Plugin_Updater {
         }
 
         return 'No changelog available for this release.';
+    }
+
+    /**
+     * Extract compatibility information from release notes
+     */
+    private function extract_compatibility_info( $remote_info ) {
+        $info = array();
+        
+        if ( isset( $remote_info['body'] ) && ! empty( $remote_info['body'] ) ) {
+            $body = $remote_info['body'];
+            
+            // Look for WordPress version compatibility
+            if ( preg_match( '/Tested up to:\s*(\d+\.\d+(\.\d+)?)/i', $body, $matches ) ) {
+                $info['tested'] = $matches[1];
+            }
+            
+            // Look for WordPress minimum requirement
+            if ( preg_match( '/Requires at least:\s*(\d+\.\d+(\.\d+)?)/i', $body, $matches ) ) {
+                $info['requires'] = $matches[1];
+            }
+            
+            // Look for PHP requirement
+            if ( preg_match( '/Requires PHP:\s*(\d+\.\d+(\.\d+)?)/i', $body, $matches ) ) {
+                $info['requires_php'] = $matches[1];
+            }
+        }
+        
+        return $info;
+    }
+
+    /**
+     * Extract upgrade notice from release notes
+     */
+    private function get_upgrade_notice( $remote_info ) {
+        if ( isset( $remote_info['body'] ) && ! empty( $remote_info['body'] ) ) {
+            $body = $remote_info['body'];
+            
+            // Look for upgrade notice section
+            if ( preg_match( '/## Upgrade Notice\s*(.+?)(\n##|$)/is', $body, $matches ) ) {
+                return trim( $matches[1] );
+            }
+            
+            // Look for first paragraph as notice
+            $lines = explode( "\n", $body );
+            foreach ( $lines as $line ) {
+                $line = trim( $line );
+                if ( ! empty( $line ) && strpos( $line, '#' ) !== 0 ) {
+                    return $line;
+                }
+            }
+        }
+        
+        return 'A new version is available with improvements and bug fixes.';
     }
 }
