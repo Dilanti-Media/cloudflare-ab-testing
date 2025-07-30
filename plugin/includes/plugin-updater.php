@@ -60,7 +60,7 @@ class Cloudflare_AB_Plugin_Updater {
                 'package' => $this->get_download_url( $remote_version ),
                 'tested' => $compatibility_info['tested'] ?? '6.8.2',
                 'requires' => $compatibility_info['requires'] ?? '5.0',
-                'requires_php' => $compatibility_info['requires_php'] ?? '7.4',
+                'requires_php' => $compatibility_info['requires_php'] ?? '8.2',
                 'compatibility' => array(),
                 'upgrade_notice' => $this->get_upgrade_notice( $remote_info )
             );
@@ -98,7 +98,7 @@ class Cloudflare_AB_Plugin_Updater {
             ),
             'requires' => $compatibility_info['requires'] ?? '5.0',
             'tested' => $compatibility_info['tested'] ?? '6.8.2',
-            'requires_php' => $compatibility_info['requires_php'] ?? '7.4',
+            'requires_php' => $compatibility_info['requires_php'] ?? '8.2',
             'last_updated' => $remote_info['published_at'] ?? date( 'Y-m-d H:i:s' ),
             'download_count' => $remote_info['download_count'] ?? 0,
             'stable_tag' => $remote_version,
