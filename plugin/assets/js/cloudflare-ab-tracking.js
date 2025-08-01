@@ -21,6 +21,7 @@
   // Configuration constants
   const DEFAULT_MAX_ATTEMPTS = 5;
   const DEFAULT_RETRY_DELAY_MS = 500;
+  const MAX_RETRY_DELAY_MS = 4000; // Cap maximum retry delay to prevent excessive waits
   const MAX_DEPENDENCY_CHECK_ATTEMPTS = 20;
   const DEPENDENCY_CHECK_DELAY_MS = 50;
 
@@ -188,6 +189,9 @@
           });
 
           // FIX: Use proper gtag format - don't include 'event' property in parameters
+          // gtag requires the event name as the second argument and the event parameters as a flat object (third argument).
+          // In contrast, dataLayer expects a single object with an 'event' property specifying the event name.
+          // This distinction is critical: passing an 'event' property in the gtag parameters will result in incorrect tracking.
           gtag("event", eventName, gtagEventData);
           debugLog("Event sent via gtag");
         } else {
@@ -439,7 +443,7 @@
     // Check if required dependencies are available
     const hasWindow = typeof window !== "undefined";
     const hasDocument = typeof document !== "undefined";
-    const hasGtag = hasWindow && typeof window.gtag !== "undefined";
+    const hasGtag = hasWindow && typeof window.gtag !== "undefined"; // Optional: gtag is preferred but not required
 
     debugLog("Checking dependencies", {
       hasWindow,
@@ -451,13 +455,16 @@
       attempt,
     });
 
-    // If essential dependencies are available, initialize
+    // Essential dependencies: window, document, and GA4 configuration
+    // gtag is optional - we can fallback to dataLayer if gtag is not available
     if (
       hasWindow &&
       hasDocument &&
       !!(window.cloudflareAbTesting && window.cloudflareAbTesting.ga4)
     ) {
-      debugLog("Dependencies satisfied - initializing tracking");
+      debugLog("Dependencies satisfied - initializing tracking", {
+        trackingMethod: hasGtag ? "gtag" : "dataLayer",
+      });
       setTimeout(safeInitializeTracking, 0);
     } else if (attempt < MAX_DEPENDENCY_CHECK_ATTEMPTS) {
       // Retry with setTimeout for better timing
@@ -473,6 +480,13 @@
         "Max dependency check attempts reached - aborting initialization",
         {
           maxAttempts: MAX_DEPENDENCY_CHECK_ATTEMPTS,
+          missingDependencies: {
+            hasWindow,
+            hasDocument,
+            hasConfig: !!(
+              window.cloudflareAbTesting && window.cloudflareAbTesting.ga4
+            ),
+          },
         },
       );
     }
@@ -493,12 +507,13 @@
     safeInitializeTracking();
 
     if (!initializationStarted && attempt < maxAttempts) {
+      const nextDelay = Math.min(delay * 2, MAX_RETRY_DELAY_MS);
       debugLog("Retry: Scheduling next attempt", {
         nextAttempt: attempt + 1,
-        nextDelay: delay * 2,
+        nextDelay,
       });
       setTimeout(function () {
-        retryInitializeTracking(attempt + 1, maxAttempts, delay * 2);
+        retryInitializeTracking(attempt + 1, maxAttempts, nextDelay);
       }, delay);
     } else if (!initializationStarted) {
       debugLog(
