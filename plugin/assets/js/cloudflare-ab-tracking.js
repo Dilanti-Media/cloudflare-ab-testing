@@ -26,6 +26,11 @@
    * Get cookie value by name
    */
   function getCookie(name) {
+    // Input validation
+    if (!name || typeof name !== 'string') {
+      return null;
+    }
+
     // Escape special regex characters to prevent ReDoS
     const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const match = document.cookie.match(new RegExp('(^|; )' + escapedName + '=([^;]+)'));
