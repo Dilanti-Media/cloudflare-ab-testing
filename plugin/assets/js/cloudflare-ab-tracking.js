@@ -18,6 +18,12 @@
   // Initialize debug mode
   const DEBUG_MODE = window.cloudflareAbTesting?.debug || false;
 
+  // Configuration constants
+  const DEFAULT_MAX_ATTEMPTS = 5;
+  const DEFAULT_RETRY_DELAY_MS = 500;
+  const MAX_DEPENDENCY_CHECK_ATTEMPTS = 20;
+  const DEPENDENCY_CHECK_DELAY_MS = 50;
+
   // Enhanced debugging function
   function debugLog(message, data = {}) {
     if (DEBUG_MODE) {
@@ -52,7 +58,7 @@
     try {
       const re = new RegExp(
         "(?:^|; )" +
-          name.replace(/([\.\$\?\*\|\{\}\(\)\[\]\\\/\+\^])/g, "\\$1") +
+          name.replace(/([.$?*|{}()[\]\\/+^])/g, "\\$1") +
           "=([^;]*)",
       );
       const match = document.cookie.match(re);
@@ -429,21 +435,20 @@
   }
 
   // Wait for required dependencies before initializing
-  function waitForDependenciesAndInitialize() {
+  function waitForDependenciesAndInitialize(attempt = 1) {
     // Check if required dependencies are available
     const hasWindow = typeof window !== "undefined";
     const hasDocument = typeof document !== "undefined";
-    const hasDataLayer = hasWindow && typeof window.dataLayer !== "undefined";
     const hasGtag = hasWindow && typeof window.gtag !== "undefined";
 
     debugLog("Checking dependencies", {
       hasWindow,
       hasDocument,
-      hasDataLayer,
       hasGtag,
       hasRequiredConfig: !!(
         window.cloudflareAbTesting && window.cloudflareAbTesting.ga4
       ),
+      attempt,
     });
 
     // If essential dependencies are available, initialize
@@ -453,16 +458,32 @@
       !!(window.cloudflareAbTesting && window.cloudflareAbTesting.ga4)
     ) {
       debugLog("Dependencies satisfied - initializing tracking");
-      requestAnimationFrame(safeInitializeTracking);
+      setTimeout(safeInitializeTracking, 0);
+    } else if (attempt < MAX_DEPENDENCY_CHECK_ATTEMPTS) {
+      // Retry with setTimeout for better timing
+      debugLog("Dependencies not ready - will retry", {
+        attempt,
+        maxAttempts: MAX_DEPENDENCY_CHECK_ATTEMPTS,
+      });
+      setTimeout(function () {
+        waitForDependenciesAndInitialize(attempt + 1);
+      }, DEPENDENCY_CHECK_DELAY_MS);
     } else {
-      // Retry with requestAnimationFrame for better timing
-      debugLog("Dependencies not ready - will retry");
-      requestAnimationFrame(waitForDependenciesAndInitialize);
+      debugLog(
+        "Max dependency check attempts reached - aborting initialization",
+        {
+          maxAttempts: MAX_DEPENDENCY_CHECK_ATTEMPTS,
+        },
+      );
     }
   }
 
   // Exponential backoff retry mechanism for fallback initialization
-  function retryInitializeTracking(attempt = 1, maxAttempts = 5, delay = 500) {
+  function retryInitializeTracking(
+    attempt = 1,
+    maxAttempts = DEFAULT_MAX_ATTEMPTS,
+    delay = DEFAULT_RETRY_DELAY_MS,
+  ) {
     if (initializationStarted) {
       debugLog("Retry: Initialization already started - stopping retries");
       return;
