@@ -4,3 +4,4 @@ wordpress
 releases/
 .DS_Store
 tmp
+node_modules
