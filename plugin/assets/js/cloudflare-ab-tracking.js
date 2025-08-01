@@ -468,7 +468,20 @@
     // gtag is checked at runtime since it may load asynchronously
     if (
       hasWindow &&
-      hasDocument &&
+    // In a browser environment, window and document are always available.
+    // Note: gtag availability is checked at runtime during tracking, not during dependency checking
+    // This allows for async loading of gtag without blocking initialization
+
+    debugLog("Checking dependencies", {
+      hasRequiredConfig: !!(
+        window.cloudflareAbTesting && window.cloudflareAbTesting.ga4
+      ),
+      attempt,
+    });
+
+    // Essential dependency: GA4 configuration
+    // gtag is checked at runtime since it may load asynchronously
+    if (
       !!(window.cloudflareAbTesting && window.cloudflareAbTesting.ga4)
     ) {
       debugLog("Dependencies satisfied - initializing tracking", {
