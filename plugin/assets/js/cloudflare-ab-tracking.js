@@ -115,7 +115,7 @@
    */
   function exposeAPI() {
     window.cloudflareAbTesting.ga4.track = function(testName, variant) {
-      if (testName && isValidVariant(variant)) {
+      if (typeof testName === 'string' && testName.trim().length > 0 && isValidVariant(variant)) {
         trackEvent(testName, variant);
       }
     };
