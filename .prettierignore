@@ -1,0 +1,22 @@
+# Ignore artifacts:
+build/
+dist/
+releases/
+wordpress/
+
+# Ignore logs:
+*.log
+
+# Ignore node modules:
+node_modules/
+
+# Ignore specific files:
+*.min.js
+*.min.css*
+
+# Ignore WordPress core files
+wordpress/
+
+# Ignore lock files
+package-lock.json
+yarn.lock

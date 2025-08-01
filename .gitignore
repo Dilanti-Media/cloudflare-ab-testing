@@ -4,3 +4,14 @@ wordpress
 releases/
 .DS_Store
 tmp
+node_modules
+
+# Editor and IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# EditorConfig and Prettier cache
+.prettiercache
