@@ -30,12 +30,32 @@
   const MAX_RETRY_DELAY_MS = 4000;
   const MAX_DEPENDENCY_CHECK_ATTEMPTS = 20;
   const DEPENDENCY_CHECK_DELAY_MS = 50;
+  
+  // Jitter configuration for retry delays
+  const JITTER_BASE_FACTOR = 0.5;
+  const JITTER_RANGE_FACTOR = 0.5;
 
-  // Enhanced debugging function
+  /**
+   * Enhanced debugging function
+   * @param {string} message - Debug message
+   * @param {Object} data - Additional debug data
+   */
   function debugLog(message, data = {}) {
     if (DEBUG_MODE) {
       console.log(`[GA4 A/B Testing] ${message}:`, data);
     }
+  }
+
+  /**
+   * Calculate jittered delay for exponential backoff
+   * @param {number} delay - Base delay in milliseconds
+   * @returns {number} Jittered delay with base factor + random variation
+   */
+  function calculateJitteredDelay(delay) {
+    const nextDelay = Math.min(delay * 2, MAX_RETRY_DELAY_MS);
+    const baseDelay = Math.floor(nextDelay * JITTER_BASE_FACTOR);
+    const jitterRange = Math.floor(nextDelay * JITTER_RANGE_FACTOR);
+    return Math.floor(baseDelay + Math.random() * jitterRange);
   }
 
   // Check if GA4 tracking is enabled
@@ -370,6 +390,56 @@
     }
   }
 
+  /**
+   * Check if required dependencies are available for initialization
+   * @returns {boolean} True if dependencies are satisfied
+   */
+  function hasRequiredConfig() {
+    return !!(window.cloudflareAbTesting && window.cloudflareAbTesting.ga4);
+  }
+
+  /**
+   * Wait for required dependencies and then initialize tracking
+   * Replaces the old polling-based approach with event-driven checking
+   */
+  function waitForDependenciesAndInitialize(attempt = 1) {
+    debugLog("Checking dependencies", {
+      hasRequiredConfig: hasRequiredConfig(),
+      attempt,
+      maxAttempts: MAX_DEPENDENCY_CHECK_ATTEMPTS,
+    });
+
+    // Essential dependency: GA4 configuration
+    // gtag is checked at runtime since it may load asynchronously
+    if (hasRequiredConfig()) {
+      debugLog("Dependencies satisfied - initializing tracking", {
+        note: "gtag availability will be checked at runtime",
+      });
+      setTimeout(safeInitializeTracking, 0);
+      return;
+    }
+
+    if (attempt < MAX_DEPENDENCY_CHECK_ATTEMPTS) {
+      // Retry with exponential backoff
+      const nextDelay = calculateJitteredDelay(DEPENDENCY_CHECK_DELAY_MS * attempt);
+      debugLog("Dependencies not ready - will retry", {
+        attempt,
+        maxAttempts: MAX_DEPENDENCY_CHECK_ATTEMPTS,
+        nextDelay,
+      });
+      setTimeout(() => {
+        waitForDependenciesAndInitialize(attempt + 1);
+      }, nextDelay);
+    } else {
+      debugLog("Max dependency check attempts reached - aborting initialization", {
+        maxAttempts: MAX_DEPENDENCY_CHECK_ATTEMPTS,
+        missingDependencies: {
+          hasConfig: hasRequiredConfig(),
+        },
+      });
+    }
+  }
+
   // Enhanced initialization with better timing and error handling
   function initializeTracking() {
     try {
@@ -442,112 +512,6 @@
     } else {
       debugLog("Initialization already started - skipping duplicate call");
       return false;
-    }
-  }
-
-  // Efficient dependency detection using MutationObserver and event listeners
-  function initializeWithEfficientDependencyCheck() {
-    function hasRequiredConfig() {
-      return !!(window.cloudflareAbTesting && window.cloudflareAbTesting.ga4);
-    }
-
-    if (hasRequiredConfig()) {
-      debugLog("Dependencies satisfied - initializing tracking (immediate)");
-      setTimeout(safeInitializeTracking, 0);
-      return;
-    }
-
-    // Set up efficient dependency checking via MutationObserver
-    const checkAndInitialize = () => {
-      if (hasRequiredConfig()) {
-        debugLog("Dependencies satisfied - initializing tracking (via observer)");
-        setTimeout(safeInitializeTracking, 0);
-        return true;
-      }
-      return false;
-    };
-
-    // Try again after DOM is ready
-    const onDocumentReady = () => {
-      if (checkAndInitialize()) {
-        document.removeEventListener("DOMContentLoaded", onDocumentReady);
-        window.removeEventListener("load", onDocumentReady);
-      }
-    };
-
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", onDocumentReady);
-    }
-    window.addEventListener("load", onDocumentReady);
-
-    // Fallback to efficient retry using exponential backoff
-    function retryInitializeTracking(
-      attempt = 1,
-      maxAttempts = DEFAULT_MAX_ATTEMPTS,
-      delay = DEFAULT_RETRY_DELAY_MS,
-    ) {
-      if (checkAndInitialize()) {
-        return;
-      }
-
-      if (attempt < maxAttempts) {
-        const nextDelay = Math.min(delay * 2, MAX_RETRY_DELAY_MS);
-        const jitteredDelay = Math.floor(nextDelay / 2 + Math.random() * (nextDelay / 2));
-        debugLog("Retry: Scheduling next attempt", {
-          attempt,
-          maxAttempts,
-          nextDelay,
-          jitteredDelay,
-        });
-        setTimeout(() => {
-          retryInitializeTracking(attempt + 1, maxAttempts, nextDelay);
-        }, jitteredDelay);
-      } else {
-        debugLog("Max attempts reached - initialization aborted", {
-          maxAttempts,
-        });
-      }
-    }
-
-    // Use fallback for browsers without MutationObserver
-    retryInitializeTracking();
-  }
-
-  // Exponential backoff retry mechanism for fallback initialization
-  function retryInitializeTracking(
-    attempt = 1,
-    maxAttempts = DEFAULT_MAX_ATTEMPTS,
-    delay = DEFAULT_RETRY_DELAY_MS,
-  ) {
-    if (initializationStarted) {
-      debugLog("Retry: Initialization already started - stopping retries");
-      return;
-    }
-
-    debugLog("Retry: Attempting fallback initialization", { attempt, delay });
-    const initializationOccurred = safeInitializeTracking();
-
-    if (!initializationOccurred && attempt < maxAttempts) {
-      const nextDelay = Math.min(delay * 2, MAX_RETRY_DELAY_MS);
-      // Enhanced jitter: ensure minimum meaningful delay while maintaining randomization
-      const baseDelay = nextDelay / 2;
-      const jitterRange = nextDelay / 2;
-      const jitteredDelay = Math.floor(baseDelay + Math.random() * jitterRange);
-      debugLog("Retry: Scheduling next attempt", {
-        nextAttempt: attempt + 1,
-        nextDelay,
-        baseDelay: Math.floor(baseDelay),
-        jitterRange: Math.floor(jitterRange),
-        jitteredDelay,
-      });
-      setTimeout(function () {
-        retryInitializeTracking(attempt + 1, maxAttempts, nextDelay);
-      }, jitteredDelay);
-    } else if (!initializationOccurred) {
-      debugLog(
-        "Retry: Maximum attempts reached - initialization may have failed",
-        { maxAttempts },
-      );
     }
   }
 
