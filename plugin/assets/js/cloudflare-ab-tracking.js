@@ -26,8 +26,17 @@
    * Get cookie value by name
    */
   function getCookie(name) {
-    const match = document.cookie.match(new RegExp('(^|; )' + name + '=([^;]+)'));
+    // Escape special regex characters to prevent ReDoS
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = document.cookie.match(new RegExp('(^|; )' + escapedName + '=([^;]+)'));
     return match ? decodeURIComponent(match[2]) : null;
+  }
+
+  /**
+   * Check if variant is valid (A or B)
+   */
+  function isValidVariant(variant) {
+    return variant === 'A' || variant === 'B';
   }
 
   /**
@@ -65,7 +74,8 @@
 
     tests.forEach(test => {
       // Check if test is active on current path
-      const isActive = test.paths?.some(path =>
+      const paths = Array.isArray(test.paths) ? test.paths : [];
+      const isActive = paths.some(path =>
           currentPath === path || currentPath.startsWith(path + '/')
       );
 
@@ -76,7 +86,7 @@
 
       // Get variant from cookie (default to 'A' if not found)
       let variant = getCookie(test.cookieName);
-      if (variant !== 'A' && variant !== 'B') {
+      if (!isValidVariant(variant)) {
         variant = 'A';
       }
 
@@ -90,7 +100,7 @@
    */
   function exposeAPI() {
     window.cloudflareAbTesting.ga4.track = function(testName, variant) {
-      if (testName && (variant === 'A' || variant === 'B')) {
+      if (testName && isValidVariant(variant)) {
         trackEvent(testName, variant);
       }
     };
