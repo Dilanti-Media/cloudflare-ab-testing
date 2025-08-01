@@ -32,7 +32,8 @@
     }
 
     // Escape special regex characters to prevent ReDoS
-    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escapedName = name.replace(/[.*+?^${}()|\\[\]]/g, '\\    // Escape special regex characters to prevent ReDoS
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');');
     const match = document.cookie.match(new RegExp('(^|; )' + escapedName + '=([^;]+)'));
     return match ? decodeURIComponent(match[2]) : null;
   }
@@ -48,25 +49,29 @@
    * Send tracking event to GA4
    */
   function trackEvent(testName, variant) {
-    const eventName = config.eventName || 'ab_test_view';
-    const eventData = {
-      ab_test: testName,
-      ab_variant: variant
-    };
+    try {
+      const eventName = config.eventName || 'ab_test_view';
+      const eventData = {
+        ab_test: testName,
+        ab_variant: variant
+      };
 
-    // Ensure dataLayer exists
-    window.dataLayer = window.dataLayer || [];
+      // Ensure dataLayer exists
+      window.dataLayer = window.dataLayer || [];
 
-    // Send via gtag if available, otherwise use dataLayer
-    if (typeof gtag !== 'undefined') {
-      gtag('event', eventName, eventData);
-      log('Event sent via gtag', { testName, variant });
-    } else {
-      window.dataLayer.push({
-        event: eventName,
-        ...eventData
-      });
-      log('Event sent via dataLayer', { testName, variant });
+      // Send via gtag if available, otherwise use dataLayer
+      if (typeof gtag !== 'undefined') {
+        gtag('event', eventName, eventData);
+        log('Event sent via gtag', { testName, variant });
+      } else {
+        window.dataLayer.push({
+          event: eventName,
+          ...eventData
+        });
+        log('Event sent via dataLayer', { testName, variant });
+      }
+    } catch (error) {
+      console.error('[GA4 A/B] Tracking failed:', error.message);
     }
   }
 
@@ -78,6 +83,12 @@
     log('Initializing tracking', { path: currentPath, testsCount: tests.length });
 
     tests.forEach(test => {
+      // Skip if no cookie name defined
+      if (!test.cookieName) {
+        log('Test missing cookieName - skipping', { test: test.test });
+        return;
+      }
+
       // Check if test is active on current path
       const paths = Array.isArray(test.paths) ? test.paths : [];
       const isActive = paths.some(path =>
