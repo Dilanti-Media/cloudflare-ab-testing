@@ -1,197 +1,427 @@
 /**
  * Google Analytics 4 Tracking for A/B Testing
- * 
+ *
  * Handles automatic GA4 tracking when enabled via plugin settings
- * 
+ *
  * Features:
  * - Conditional loading based on plugin settings
  * - Path-based test activation
  * - Cookie-based variant detection
  * - Custom event naming support
  * - GA4 dataLayer integration
+ * - Enhanced error handling and debugging
  */
 
-(function() {
-    'use strict';
+(function () {
+  "use strict";
 
-    // Check if GA4 tracking is enabled
-    if (!window.cloudflareAbTesting || !window.cloudflareAbTesting.ga4) {
-        return; // GA4 not configured, exit early
+  // Initialize debug mode
+  const DEBUG_MODE = window.cloudflareAbTesting?.debug || false;
+
+  // Enhanced debugging function
+  function debugLog(message, data = {}) {
+    if (DEBUG_MODE) {
+      console.log(`[GA4 A/B Testing] ${message}:`, data);
     }
+  }
 
-    const config = window.cloudflareAbTesting.ga4;
-    const tests = window.cloudflareAbTesting.registry || [];
+  // Check if GA4 tracking is enabled
+  debugLog("Script initialized", {
+    cloudflareAbTesting: window.cloudflareAbTesting,
+  });
 
-    /**
-     * Get cookie value by name
-     * @param {string} name - Cookie name to retrieve
-     * @returns {string|null} Cookie value or null if not found
-     */
-    function getCookieValue(name) {
-        const re = new RegExp(
-            "(?:^|; )" +
-            name.replace(/([\.$?*|{}\(\)\[\]\\\/\+^])/g, '\\$1') +
-            "=([^;]*)"
-        );
-        const match = document.cookie.match(re);
-        return match ? decodeURIComponent(match[1]) : null;
+  if (!window.cloudflareAbTesting || !window.cloudflareAbTesting.ga4) {
+    debugLog("GA4 not configured - exiting", {
+      hasCloudflareAbTesting: !!window.cloudflareAbTesting,
+      hasGa4Config: !!window.cloudflareAbTesting?.ga4,
+    });
+    return; // GA4 not configured, exit early
+  }
+
+  const config = window.cloudflareAbTesting.ga4;
+  const tests = window.cloudflareAbTesting.registry || [];
+
+  debugLog("Configuration loaded", { config, tests });
+
+  /**
+   * Get cookie value by name
+   * @param {string} name - Cookie name to retrieve
+   * @returns {string|null} Cookie value or null if not found
+   */
+  function getCookieValue(name) {
+    try {
+      const re = new RegExp(
+        "(?:^|; )" +
+          name.replace(/([.$?*|{}\(\)\[\]\\\/+^])/g, "\\$1") +
+          "=([^;]*)",
+      );
+      const match = document.cookie.match(re);
+      const value = match ? decodeURIComponent(match[1]) : null;
+      debugLog(`Cookie ${name} retrieved`, { value, found: !!value });
+      return value;
+    } catch (error) {
+      debugLog(`Error reading cookie ${name}`, { error: error.message });
+      return null;
     }
+  }
 
-    /**
-     * Initialize A/B test tracking for GA4
-     * 
-     * This function is called automatically when the script loads
-     * to set up tracking for all active A/B tests on the current page.
-     */
-    function initABTracking() {
-        const path = window.location.pathname;
-        window.dataLayer = window.dataLayer || [];
+  /**
+   * Initialize A/B test tracking for GA4
+   *
+   * This function is called automatically when the script loads
+   * to set up tracking for all active A/B tests on the current page.
+   */
+  function initABTracking() {
+    try {
+      const path = window.location.pathname;
+      debugLog("Starting A/B tracking", { path, totalTests: tests.length });
 
-        // Process each test in the registry
-        tests.forEach(entry => {
-            // Check if test is active for current path
-            const isActive = entry.paths.some(prefix =>
-                path === prefix || path.startsWith(prefix + '/')
-            );
+      // Ensure dataLayer exists
+      window.dataLayer = window.dataLayer || [];
+      debugLog("dataLayer initialized", {
+        dataLayerExists: !!window.dataLayer,
+      });
 
-            if (!isActive) {
-                return; // Skip tests not active on this page
-            }
+      // Process each test in the registry
+      tests.forEach((entry, index) => {
+        debugLog(`Processing test ${index}`, entry);
 
-            // Read the cookie for this test
-            let variant = getCookieValue(entry.cookieName);
-            
-            // If no cookie yet, default to "A" (Worker will override on actual response)
-            if (variant !== 'A' && variant !== 'B') {
-                variant = 'A';
-            }
+        // Check if test is active for current path
+        const isActive =
+          entry.paths &&
+          Array.isArray(entry.paths) &&
+          entry.paths.some(
+            (prefix) => path === prefix || path.startsWith(prefix + "/"),
+          );
 
-            // Get event name from config or use default
-            const eventName = config.eventName || 'abVariantInit';
-
-            // Build the event data object
-            const eventData = {
-                event: eventName,
-                ab_test: entry.test,
-                ab_variant: variant
-            };
-
-            // Add custom dimensions if provided
-            if (config.customDimensions) {
-                const customDims = config.customDimensions.split(',')
-                    .map(dim => dim.trim())
-                    .filter(dim => dim);
-                
-                customDims.forEach(dim => {
-                    eventData[dim] = {
-                        test: entry.test,
-                        variant: variant,
-                        path: path
-                    };
-                });
-            }
-
-            // Add standard A/B testing dimensions
-            eventData.ab_session = {
-                test: entry.test,
-                variant: variant,
-                path: path,
-                timestamp: new Date().toISOString()
-            };
-
-            // Special handling for Google Analytics Enhanced Ecommerce
-            if (typeof gtag !== 'undefined') {
-                // Direct gtag integration
-                gtag('event', eventName, eventData);
-            } else {
-                // Standard dataLayer integration
-                window.dataLayer.push(eventData);
-            }
-
-            // Debug output for admin users
-            if (window.cloudflareAbTesting.debug) {
-                console.log('GA4 A/B Test Tracking:', {
-                    test: entry.test,
-                    variant: variant,
-                    event: eventName,
-                    path: path
-                });
-            }
+        debugLog(`Test ${entry.test} path check`, {
+          test: entry.test,
+          path,
+          testPaths: entry.paths,
+          isActive,
         });
-    }
 
-    /**
-     * Update tracking when variant changes (via cookie)
-     * Useful for user-initiated changes or testing scenarios
-     * 
-     * @param {string} testName - The test slug/identifier
-     * @param {string} newVariant - The new variant ('A' or 'B')
-     */
-    function updateVariantTracking(testName, newVariant) {
-        if (!config.enabled || typeof testName === 'undefined' || typeof newVariant === 'undefined') {
-            return;
+        if (!isActive) {
+          debugLog(`Test ${entry.test} not active for current path - skipping`);
+          return; // Skip tests not active on this page
         }
 
-        window.dataLayer = window.dataLayer || [];
-        const eventName = config.eventName || 'abVariantInit';
+        debugLog(`Test ${entry.test} is active - proceeding`);
 
-        const updateData = {
-            event: eventName,
-            ab_test: testName,
-            ab_variant: newVariant,
-            ab_update_type: 'variant_change'
+        // Read the cookie for this test
+        let variant = getCookieValue(entry.cookieName);
+
+        // If no cookie yet, default to "A" (Worker will override on actual response)
+        if (variant !== "A" && variant !== "B") {
+          debugLog(
+            `No valid cookie found for ${entry.cookieName}, defaulting to A`,
+          );
+          variant = "A";
+        }
+
+        debugLog(`Variant determined for ${entry.test}`, { variant });
+
+        // Get event name from config or use default
+        const eventName = config.eventName || "abVariantInit";
+        debugLog(`Event name configured`, { eventName });
+
+        // Build event data for gtag (without 'event' property)
+        const gtagEventData = {
+          ab_test: entry.test,
+          ab_variant: variant,
         };
 
-        window.dataLayer.push(updateData);
-
-        // Debug output
-        if (window.cloudflareAbTesting.debug) {
-            console.log('GA4 A/B Variant Updated:', updateData);
-        }
-    }
-
-    /**
-     * Manual trigger for A/B test events
-     * Useful for custom integrations or testing
-     * 
-     * @param {Object} options - Event configuration
-     * @param {string} options.test - Test identifier
-     * @param {string} options.variant - Variant ('A' or 'B')
-     * @param {string} [options.eventName] - Custom event name
-     * @param {Object} [options.customData] - Additional event data
-     */
-    function trackABTest(options = {}) {
-        if (!config.enabled || !options.test || !options.variant) {
-            return;
-        }
-
-        const eventName = options.eventName || config.eventName || 'abVariantInit';
-        const eventData = {
-            event: eventName,
-            ab_test: options.test,
-            ab_variant: options.variant,
-            ...options.customData
+        // Build event data for dataLayer (with 'event' property)
+        const dataLayerEventData = {
+          event: eventName,
+          ab_test: entry.test,
+          ab_variant: variant,
+          ...gtagEventData,
         };
 
-        window.dataLayer = window.dataLayer || [];
-        window.dataLayer.push(eventData);
-    }
+        // Add custom dimensions if provided
+        if (config.customDimensions) {
+          const customDims = config.customDimensions
+            .split(",")
+            .map((dim) => dim.trim())
+            .filter((dim) => dim);
 
-    // Initialize tracking when page loads
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initABTracking);
-    } else {
-        // DOM already loaded
-        initABTracking();
-    }
+          debugLog(`Adding custom dimensions`, { customDims });
 
-    // Expose public API for advanced integrations
-    window.cloudflareAbTesting.ga4 = {
+          customDims.forEach((dim) => {
+            gtagEventData[dim] = {
+              test: entry.test,
+              variant: variant,
+              path: path,
+            };
+          });
+        }
+
+        // Add standard A/B testing dimensions
+        gtagEventData.ab_session = {
+          test: entry.test,
+          variant: variant,
+          path: path,
+          timestamp: new Date().toISOString(),
+        };
+
+        debugLog(`Final event data prepared`, {
+          gtagEventData,
+          dataLayerEventData,
+        });
+
+        // Special handling for Google Analytics Enhanced Ecommerce
+        if (typeof gtag !== "undefined") {
+          debugLog("gtag available - sending event via gtag", {
+            gtagType: typeof gtag,
+            eventName,
+            eventData: gtagEventData,
+          });
+
+          // FIX: Use proper gtag format - don't include 'event' property in parameters
+          gtag("event", eventName, gtagEventData);
+          debugLog("Event sent via gtag");
+        } else {
+          debugLog("gtag not available - using dataLayer");
+          // Standard dataLayer integration
+          window.dataLayer.push(dataLayerEventData);
+          debugLog("Event sent via dataLayer");
+        }
+
+        debugLog(`GA4 A/B Test Tracking completed for ${entry.test}`, {
+          test: entry.test,
+          variant: variant,
+          event: eventName,
+          path: path,
+          timestamp: new Date().toISOString(),
+        });
+      });
+
+      debugLog("A/B tracking initialization completed");
+    } catch (error) {
+      console.error("[GA4 A/B Testing] Error in initABTracking:", error);
+      debugLog("Tracking failed with error", {
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  /**
+   * Update tracking when variant changes (via cookie)
+   * Useful for user-initiated changes or testing scenarios
+   *
+   * @param {string} testName - The test slug/identifier
+   * @param {string} newVariant - The new variant ('A' or 'B')
+   */
+  function updateVariantTracking(testName, newVariant) {
+    try {
+      debugLog("Updating variant tracking", { testName, newVariant });
+
+      if (
+        !config.enabled ||
+        typeof testName === "undefined" ||
+        typeof newVariant === "undefined"
+      ) {
+        debugLog("Variant update skipped - invalid parameters", {
+          configEnabled: config.enabled,
+          testName,
+          newVariant,
+        });
+        return;
+      }
+
+      if (newVariant !== "A" && newVariant !== "B") {
+        debugLog("Invalid variant provided", { newVariant });
+        return;
+      }
+
+      window.dataLayer = window.dataLayer || [];
+      const eventName = config.eventName || "abVariantInit";
+
+      // Build separate data for gtag and dataLayer
+      const gtagUpdateData = {
+        ab_test: testName,
+        ab_variant: newVariant,
+        ab_update_type: "variant_change",
+      };
+
+      const dataLayerUpdateData = {
+        event: eventName,
+        ...gtagUpdateData,
+      };
+
+      debugLog("Sending variant update event", {
+        gtagUpdateData,
+        dataLayerUpdateData,
+      });
+
+      if (typeof gtag !== "undefined") {
+        gtag("event", eventName, gtagUpdateData);
+        debugLog("Variant update sent via gtag");
+      } else {
+        window.dataLayer.push(dataLayerUpdateData);
+        debugLog("Variant update sent via dataLayer");
+      }
+
+      debugLog("Variant tracking updated successfully", {
+        testName,
+        newVariant,
+      });
+    } catch (error) {
+      console.error("[GA4 A/B Testing] Error in updateVariantTracking:", error);
+      debugLog("Variant update failed", {
+        error: error.message,
+        testName,
+        newVariant,
+      });
+    }
+  }
+
+  /**
+   * Manual trigger for A/B test events
+   * Useful for custom integrations or testing
+   *
+   * @param {Object} options - Event configuration
+   * @param {string} options.test - Test identifier
+   * @param {string} options.variant - Variant ('A' or 'B')
+   * @param {string} [options.eventName] - Custom event name
+   * @param {Object} [options.customData] - Additional event data
+   */
+  function trackABTest(options = {}) {
+    try {
+      debugLog("Manual A/B test trigger called", { options });
+
+      if (!config.enabled || !options.test || !options.variant) {
+        debugLog("Manual test trigger skipped - invalid parameters", {
+          configEnabled: config.enabled,
+          test: options.test,
+          variant: options.variant,
+        });
+        return;
+      }
+
+      if (options.variant !== "A" && options.variant !== "B") {
+        debugLog("Invalid variant provided for manual test", {
+          variant: options.variant,
+        });
+        return;
+      }
+
+      const eventName =
+        options.eventName || config.eventName || "abVariantInit";
+
+      // Build separate data for gtag and dataLayer
+      const gtagEventData = {
+        ab_test: options.test,
+        ab_variant: options.variant,
+        ...options.customData,
+      };
+
+      const dataLayerEventData = {
+        event: eventName,
+        ...gtagEventData,
+      };
+
+      debugLog("Sending manual test event", {
+        eventName,
+        gtagEventData,
+        dataLayerEventData,
+      });
+
+      window.dataLayer = window.dataLayer || [];
+
+      if (typeof gtag !== "undefined") {
+        gtag("event", eventName, gtagEventData);
+        debugLog("Manual test event sent via gtag");
+      } else {
+        window.dataLayer.push(dataLayerEventData);
+        debugLog("Manual test event sent via dataLayer");
+      }
+
+      debugLog("Manual A/B test tracking completed", {
+        test: options.test,
+        variant: options.variant,
+        eventName,
+      });
+    } catch (error) {
+      console.error("[GA4 A/B Testing] Error in trackABTest:", error);
+      debugLog("Manual test tracking failed", {
+        error: error.message,
+        options,
+      });
+    }
+  }
+
+  // Enhanced initialization with better timing and error handling
+  function initializeTracking() {
+    try {
+      debugLog("Starting tracking initialization");
+
+      // Verify configuration is still valid
+      if (!window.cloudflareAbTesting || !window.cloudflareAbTesting.ga4) {
+        debugLog("Configuration missing during initialization");
+        return;
+      }
+
+      // Initialize tracking
+      initABTracking();
+
+      // Expose public API for advanced integrations
+      window.cloudflareAbTesting.ga4 = {
         updateVariant: updateVariantTracking,
         trackTest: trackABTest,
-        isEnabled: function() {
+        isEnabled: function () {
+          try {
             return config.enabled === true;
-        }
-    };
+          } catch (error) {
+            debugLog("Error checking enabled status", { error: error.message });
+            return false;
+          }
+        },
+        getDebugInfo: function () {
+          return {
+            config: config,
+            tests: tests,
+            debugMode: DEBUG_MODE,
+            hasDataLayer: !!window.dataLayer,
+            hasGtag: typeof gtag !== "undefined",
+          };
+        },
+      };
 
+      debugLog("Public API exposed", {
+        functions: ["updateVariant", "trackTest", "isEnabled", "getDebugInfo"],
+      });
+
+      debugLog("GA4 A/B Tracking initialization completed successfully");
+    } catch (error) {
+      console.error(
+        "[GA4 A/B Testing] Fatal error during initialization:",
+        error,
+      );
+      debugLog("Initialization failed", {
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  // Initialize tracking with proper timing
+  if (document.readyState === "loading") {
+    debugLog("DOM not ready - waiting for DOMContentLoaded");
+    document.addEventListener("DOMContentLoaded", initializeTracking);
+  } else {
+    debugLog("DOM already loaded - initializing immediately");
+    // Small delay to ensure all scripts are loaded
+    setTimeout(initializeTracking, 100);
+  }
+
+  // Fallback initialization for safety
+  if (document.readyState === "complete") {
+    debugLog("Fallback: DOM complete - ensuring initialization");
+    setTimeout(initializeTracking, 500);
+  }
+
+  debugLog("GA4 A/B Tracking script loaded and configured");
 })();
