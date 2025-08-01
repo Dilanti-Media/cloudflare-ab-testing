@@ -32,8 +32,7 @@
     }
 
     // Escape special regex characters to prevent ReDoS
-    const escapedName = name.replace(/[.*+?^${}()|\\[\]]/g, '\\    // Escape special regex characters to prevent ReDoS
-    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');');
+    const escapedName = name.replace(/[.*+?^${}()|\\[\]]/g, '\\$&');
     const match = document.cookie.match(new RegExp('(^|; )' + escapedName + '=([^;]+)'));
     return match ? decodeURIComponent(match[2]) : null;
   }
