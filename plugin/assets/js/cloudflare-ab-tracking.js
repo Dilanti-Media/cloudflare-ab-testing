@@ -136,7 +136,6 @@
           event: eventName,
           ab_test: entry.test,
           ab_variant: variant,
-          ...gtagEventData,
         };
 
         // Add custom dimensions if provided
@@ -149,21 +148,25 @@
           debugLog(`Adding custom dimensions`, { customDims });
 
           customDims.forEach((dim) => {
-            gtagEventData[dim] = {
+            const customDimData = {
               test: entry.test,
               variant: variant,
               path: path,
             };
+            gtagEventData[dim] = customDimData;
+            dataLayerEventData[dim] = customDimData;
           });
         }
 
         // Add standard A/B testing dimensions
-        gtagEventData.ab_session = {
+        const sessionData = {
           test: entry.test,
           variant: variant,
           path: path,
           timestamp: new Date().toISOString(),
         };
+        gtagEventData.ab_session = sessionData;
+        dataLayerEventData.ab_session = sessionData;
 
         debugLog(`Final event data prepared`, {
           gtagEventData,
@@ -368,26 +371,32 @@
       initABTracking();
 
       // Expose public API for advanced integrations
-      window.cloudflareAbTesting.ga4 = {
-        updateVariant: updateVariantTracking,
-        trackTest: trackABTest,
-        isEnabled: function () {
-          try {
-            return config.enabled === true;
-          } catch (error) {
-            debugLog("Error checking enabled status", { error: error.message });
-            return false;
-          }
-        },
-        getDebugInfo: function () {
-          return {
-            config: config,
-            tests: tests,
-            debugMode: DEBUG_MODE,
-            hasDataLayer: !!window.dataLayer,
-            hasGtag: typeof gtag !== "undefined",
-          };
-        },
+      // Extend the existing ga4 object instead of overwriting it
+      if (
+        !window.cloudflareAbTesting.ga4 ||
+        typeof window.cloudflareAbTesting.ga4 !== "object"
+      ) {
+        window.cloudflareAbTesting.ga4 = {};
+      }
+
+      window.cloudflareAbTesting.ga4.updateVariant = updateVariantTracking;
+      window.cloudflareAbTesting.ga4.trackTest = trackABTest;
+      window.cloudflareAbTesting.ga4.isEnabled = function () {
+        try {
+          return config.enabled === true;
+        } catch (error) {
+          debugLog("Error checking enabled status", { error: error.message });
+          return false;
+        }
+      };
+      window.cloudflareAbTesting.ga4.getDebugInfo = function () {
+        return {
+          config: config,
+          tests: tests,
+          debugMode: DEBUG_MODE,
+          hasDataLayer: !!window.dataLayer,
+          hasGtag: typeof gtag !== "undefined",
+        };
       };
 
       debugLog("Public API exposed", {
@@ -408,19 +417,30 @@
   }
 
   // Initialize tracking with proper timing
+  let initializationStarted = false;
+
+  function safeInitializeTracking() {
+    if (!initializationStarted) {
+      initializationStarted = true;
+      initializeTracking();
+    } else {
+      debugLog("Initialization already started - skipping duplicate call");
+    }
+  }
+
   if (document.readyState === "loading") {
     debugLog("DOM not ready - waiting for DOMContentLoaded");
-    document.addEventListener("DOMContentLoaded", initializeTracking);
+    document.addEventListener("DOMContentLoaded", safeInitializeTracking);
   } else {
     debugLog("DOM already loaded - initializing immediately");
     // Small delay to ensure all scripts are loaded
-    setTimeout(initializeTracking, 100);
+    setTimeout(safeInitializeTracking, 100);
   }
 
-  // Fallback initialization for safety
+  // Fallback initialization for safety - only if not already complete
   if (document.readyState === "complete") {
     debugLog("Fallback: DOM complete - ensuring initialization");
-    setTimeout(initializeTracking, 500);
+    setTimeout(safeInitializeTracking, 500);
   }
 
   debugLog("GA4 A/B Tracking script loaded and configured");
