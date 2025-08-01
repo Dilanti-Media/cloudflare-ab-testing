@@ -21,7 +21,13 @@
   // Configuration constants
   const DEFAULT_MAX_ATTEMPTS = 5;
   const DEFAULT_RETRY_DELAY_MS = 500;
-  const MAX_RETRY_DELAY_MS = 4000; // Cap maximum retry delay to prevent excessive waits
+  /**
+   * Cap maximum retry delay to prevent excessive waits.
+   * 4000ms (4 seconds) is chosen as a balance between responsiveness and not overwhelming the user with rapid retries.
+   * This value is commonly used in UI retry patterns and is considered a reasonable upper bound for most user interactions.
+   * Adjust based on user experience research or specific application requirements if needed.
+   */
+  const MAX_RETRY_DELAY_MS = 4000;
   const MAX_DEPENDENCY_CHECK_ATTEMPTS = 20;
   const DEPENDENCY_CHECK_DELAY_MS = 50;
 
@@ -432,9 +438,12 @@
   function safeInitializeTracking() {
     if (!initializationStarted) {
       initializationStarted = true;
+      debugLog("Starting initialization - setting flag to prevent duplicates");
       initializeTracking();
+      return true;
     } else {
       debugLog("Initialization already started - skipping duplicate call");
+      return false;
     }
   }
 
@@ -443,12 +452,12 @@
     // Check if required dependencies are available
     const hasWindow = typeof window !== "undefined";
     const hasDocument = typeof document !== "undefined";
-    const hasGtag = hasWindow && typeof window.gtag !== "undefined"; // Optional: gtag is preferred but not required
+    // Note: gtag availability is checked at runtime during tracking, not during dependency checking
+    // This allows for async loading of gtag without blocking initialization
 
     debugLog("Checking dependencies", {
       hasWindow,
       hasDocument,
-      hasGtag,
       hasRequiredConfig: !!(
         window.cloudflareAbTesting && window.cloudflareAbTesting.ga4
       ),
@@ -456,14 +465,14 @@
     });
 
     // Essential dependencies: window, document, and GA4 configuration
-    // gtag is optional - we can fallback to dataLayer if gtag is not available
+    // gtag is checked at runtime since it may load asynchronously
     if (
       hasWindow &&
       hasDocument &&
       !!(window.cloudflareAbTesting && window.cloudflareAbTesting.ga4)
     ) {
       debugLog("Dependencies satisfied - initializing tracking", {
-        trackingMethod: hasGtag ? "gtag" : "dataLayer",
+        note: "gtag availability will be checked at runtime",
       });
       setTimeout(safeInitializeTracking, 0);
     } else if (attempt < MAX_DEPENDENCY_CHECK_ATTEMPTS) {
@@ -504,9 +513,9 @@
     }
 
     debugLog("Retry: Attempting fallback initialization", { attempt, delay });
-    safeInitializeTracking();
+    const initializationOccurred = safeInitializeTracking();
 
-    if (!initializationStarted && attempt < maxAttempts) {
+    if (!initializationOccurred && attempt < maxAttempts) {
       const nextDelay = Math.min(delay * 2, MAX_RETRY_DELAY_MS);
       debugLog("Retry: Scheduling next attempt", {
         nextAttempt: attempt + 1,
@@ -515,7 +524,7 @@
       setTimeout(function () {
         retryInitializeTracking(attempt + 1, maxAttempts, nextDelay);
       }, delay);
-    } else if (!initializationStarted) {
+    } else if (!initializationOccurred) {
       debugLog(
         "Retry: Maximum attempts reached - initialization may have failed",
         { maxAttempts },
@@ -536,10 +545,10 @@
     waitForDependenciesAndInitialize();
   }
 
-  // Fallback initialization for safety - only if not already complete and with retry mechanism
-  if (document.readyState === "complete" && !initializationStarted) {
+  // Fallback initialization for safety - use retry mechanism which includes atomic check
+  if (document.readyState === "complete") {
     debugLog("Fallback: DOM complete - ensuring initialization with retries");
-    retryInitializeTracking();
+    retryInitializeTracking(); // This includes atomic initializationStarted check
   }
 
   debugLog("GA4 A/B Tracking script loaded and configured");
