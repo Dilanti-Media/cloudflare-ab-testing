@@ -33,7 +33,7 @@
 
     // Escape special regex characters to prevent ReDoS
     const escapedName = name.replace(/[.*+?^${}()|\\[\]]/g, '\\$&');
-    const match = document.cookie.match(new RegExp('(^|; )' + escapedName + '=([^;]+)'));
+    const match = document.cookie.match(new RegExp('(^|; )' + escapedName + '=([^;]*)'));
     return match ? decodeURIComponent(match[2]) : null;
   }
 
@@ -115,7 +115,7 @@
    */
   function exposeAPI() {
     window.cloudflareAbTesting.ga4.track = function(testName, variant) {
-      if (testName && isValidVariant(variant)) {
+      if (typeof testName === 'string' && testName.trim().length > 0 && isValidVariant(variant)) {
         trackEvent(testName, variant);
       }
     };
