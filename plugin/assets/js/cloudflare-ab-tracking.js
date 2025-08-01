@@ -197,7 +197,7 @@
           // FIX: Use proper gtag format - don't include 'event' property in parameters
           // gtag requires the event name as the second argument and the event parameters as a flat object (third argument).
           // In contrast, dataLayer expects a single object with an 'event' property specifying the event name.
-          // This distinction is critical: passing an 'event' property in the gtag parameters will result in incorrect tracking.
+          // gtag: event name is an argument (no 'event' property in params); dataLayer: 'event' property required in object.
           gtag("event", eventName, gtagEventData);
           debugLog("Event sent via gtag");
         } else {
