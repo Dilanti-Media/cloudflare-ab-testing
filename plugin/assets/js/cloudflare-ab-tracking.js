@@ -64,9 +64,7 @@
   function getCookieValue(name) {
     try {
       const re = new RegExp(
-        "(?:^|; )" +
-          name.replace(/([.$?*|{}()[\]\\+^])/g, "\\$1") +
-          "=([^;]*)",
+        "(?:^|; )" + name.replace(/([.$?*|{}()[\]\\+^])/g, "\\$1") + "=([^;]*)",
       );
       const match = document.cookie.match(re);
       const value = match ? decodeURIComponent(match[1]) : null;
@@ -449,41 +447,20 @@
 
   // Wait for required dependencies before initializing
   function waitForDependenciesAndInitialize(attempt = 1) {
-    // Check if required dependencies are available
-    const hasWindow = typeof window !== "undefined";
-    const hasDocument = typeof document !== "undefined";
-    // Note: gtag availability is checked at runtime during tracking, not during dependency checking
-    // This allows for async loading of gtag without blocking initialization
-
-    debugLog("Checking dependencies", {
-      hasWindow,
-      hasDocument,
-      hasRequiredConfig: !!(
-        window.cloudflareAbTesting && window.cloudflareAbTesting.ga4
-      ),
-      attempt,
-    });
-
-    // Essential dependencies: window, document, and GA4 configuration
-    // gtag is checked at runtime since it may load asynchronously
-    if (
-      hasWindow &&
     // In a browser environment, window and document are always available.
-    // Note: gtag availability is checked at runtime during tracking, not during dependency checking
-    // This allows for async loading of gtag without blocking initialization
+    // Only check for the essential GA4 configuration dependency.
+    const hasRequiredConfig = !!(
+      window.cloudflareAbTesting && window.cloudflareAbTesting.ga4
+    );
 
     debugLog("Checking dependencies", {
-      hasRequiredConfig: !!(
-        window.cloudflareAbTesting && window.cloudflareAbTesting.ga4
-      ),
+      hasRequiredConfig,
       attempt,
     });
 
     // Essential dependency: GA4 configuration
     // gtag is checked at runtime since it may load asynchronously
-    if (
-      !!(window.cloudflareAbTesting && window.cloudflareAbTesting.ga4)
-    ) {
+    if (hasRequiredConfig) {
       debugLog("Dependencies satisfied - initializing tracking", {
         note: "gtag availability will be checked at runtime",
       });
@@ -503,11 +480,7 @@
         {
           maxAttempts: MAX_DEPENDENCY_CHECK_ATTEMPTS,
           missingDependencies: {
-            hasWindow,
-            hasDocument,
-            hasConfig: !!(
-              window.cloudflareAbTesting && window.cloudflareAbTesting.ga4
-            ),
+            hasConfig: hasRequiredConfig,
           },
         },
       );
@@ -530,13 +503,7 @@
 
     if (!initializationOccurred && attempt < maxAttempts) {
       const nextDelay = Math.min(delay * 2, MAX_RETRY_DELAY_MS);
-      debugLog("Retry: Scheduling next attempt", {
-        nextAttempt: attempt + 1,
-        nextDelay,
-      });
-      setTimeout(function () {
-        retryInitializeTracking(attempt + 1, maxAttempts, nextDelay);
-      // Add full jitter: randomize delay between 0 and nextDelay
+      // Add jitter: randomize delay between 0 and nextDelay to prevent thundering herd
       const jitteredDelay = Math.floor(Math.random() * nextDelay);
       debugLog("Retry: Scheduling next attempt", {
         nextAttempt: attempt + 1,
