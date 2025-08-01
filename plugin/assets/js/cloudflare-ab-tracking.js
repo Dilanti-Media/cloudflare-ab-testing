@@ -52,7 +52,7 @@
     try {
       const re = new RegExp(
         "(?:^|; )" +
-          name.replace(/([.$?*|{}\(\)\[\]\\\/+^])/g, "\\$1") +
+          name.replace(/([\.\$\?\*\|\{\}\(\)\[\]\\\/\+\^])/g, "\\$1") +
           "=([^;]*)",
       );
       const match = document.cookie.match(re);
@@ -416,7 +416,7 @@
     }
   }
 
-  // Initialize tracking with proper timing
+  // Initialize tracking with proper timing and dependency checking
   let initializationStarted = false;
 
   function safeInitializeTracking() {
@@ -428,19 +428,82 @@
     }
   }
 
-  if (document.readyState === "loading") {
-    debugLog("DOM not ready - waiting for DOMContentLoaded");
-    document.addEventListener("DOMContentLoaded", safeInitializeTracking);
-  } else {
-    debugLog("DOM already loaded - initializing immediately");
-    // Small delay to ensure all scripts are loaded
-    setTimeout(safeInitializeTracking, 100);
+  // Wait for required dependencies before initializing
+  function waitForDependenciesAndInitialize() {
+    // Check if required dependencies are available
+    const hasWindow = typeof window !== "undefined";
+    const hasDocument = typeof document !== "undefined";
+    const hasDataLayer = hasWindow && typeof window.dataLayer !== "undefined";
+    const hasGtag = hasWindow && typeof window.gtag !== "undefined";
+
+    debugLog("Checking dependencies", {
+      hasWindow,
+      hasDocument,
+      hasDataLayer,
+      hasGtag,
+      hasRequiredConfig: !!(
+        window.cloudflareAbTesting && window.cloudflareAbTesting.ga4
+      ),
+    });
+
+    // If essential dependencies are available, initialize
+    if (
+      hasWindow &&
+      hasDocument &&
+      !!(window.cloudflareAbTesting && window.cloudflareAbTesting.ga4)
+    ) {
+      debugLog("Dependencies satisfied - initializing tracking");
+      requestAnimationFrame(safeInitializeTracking);
+    } else {
+      // Retry with requestAnimationFrame for better timing
+      debugLog("Dependencies not ready - will retry");
+      requestAnimationFrame(waitForDependenciesAndInitialize);
+    }
   }
 
-  // Fallback initialization for safety - only if not already complete
-  if (document.readyState === "complete") {
-    debugLog("Fallback: DOM complete - ensuring initialization");
-    setTimeout(safeInitializeTracking, 500);
+  // Exponential backoff retry mechanism for fallback initialization
+  function retryInitializeTracking(attempt = 1, maxAttempts = 5, delay = 500) {
+    if (initializationStarted) {
+      debugLog("Retry: Initialization already started - stopping retries");
+      return;
+    }
+
+    debugLog("Retry: Attempting fallback initialization", { attempt, delay });
+    safeInitializeTracking();
+
+    if (!initializationStarted && attempt < maxAttempts) {
+      debugLog("Retry: Scheduling next attempt", {
+        nextAttempt: attempt + 1,
+        nextDelay: delay * 2,
+      });
+      setTimeout(function () {
+        retryInitializeTracking(attempt + 1, maxAttempts, delay * 2);
+      }, delay);
+    } else if (!initializationStarted) {
+      debugLog(
+        "Retry: Maximum attempts reached - initialization may have failed",
+        { maxAttempts },
+      );
+    }
+  }
+
+  // Primary initialization logic
+  if (document.readyState === "loading") {
+    debugLog("DOM not ready - waiting for DOMContentLoaded");
+    document.addEventListener(
+      "DOMContentLoaded",
+      waitForDependenciesAndInitialize,
+    );
+  } else {
+    debugLog("DOM already loaded - checking dependencies");
+    // Use dependency checking instead of arbitrary timeout
+    waitForDependenciesAndInitialize();
+  }
+
+  // Fallback initialization for safety - only if not already complete and with retry mechanism
+  if (document.readyState === "complete" && !initializationStarted) {
+    debugLog("Fallback: DOM complete - ensuring initialization with retries");
+    retryInitializeTracking();
   }
 
   debugLog("GA4 A/B Tracking script loaded and configured");
