@@ -117,6 +117,8 @@
     window.cloudflareAbTesting.ga4.track = function(testName, variant) {
       if (typeof testName === 'string' && testName.trim().length > 0 && isValidVariant(variant)) {
         trackEvent(testName, variant);
+      } else {
+        log('Invalid arguments to track():', { testName, variant });
       }
     };
 
