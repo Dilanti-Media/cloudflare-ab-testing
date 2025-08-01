@@ -536,7 +536,16 @@
       });
       setTimeout(function () {
         retryInitializeTracking(attempt + 1, maxAttempts, nextDelay);
-      }, delay);
+      // Add full jitter: randomize delay between 0 and nextDelay
+      const jitteredDelay = Math.floor(Math.random() * nextDelay);
+      debugLog("Retry: Scheduling next attempt", {
+        nextAttempt: attempt + 1,
+        nextDelay,
+        jitteredDelay,
+      });
+      setTimeout(function () {
+        retryInitializeTracking(attempt + 1, maxAttempts, nextDelay);
+      }, jitteredDelay);
     } else if (!initializationOccurred) {
       debugLog(
         "Retry: Maximum attempts reached - initialization may have failed",
