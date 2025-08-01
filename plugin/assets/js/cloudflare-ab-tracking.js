@@ -26,7 +26,7 @@
    * Get cookie value by name
    */
   function getCookie(name) {
-    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    const match = document.cookie.match(new RegExp('(^|; )' + name + '=([^;]+)'));
     return match ? decodeURIComponent(match[2]) : null;
   }
 
@@ -104,8 +104,8 @@
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initTracking);
   } else {
-    // DOM already loaded
-    setTimeout(initTracking, 0);
+    // DOM already loaded - call directly
+    initTracking();
   }
 
   // Expose public API
