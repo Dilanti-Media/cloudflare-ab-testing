@@ -3,3 +3,4 @@ wordpress
 .env
 releases/
 .DS_Store
+tmp
