@@ -71,7 +71,7 @@
                 path === prefix || path.startsWith(prefix + '/')
             );
 
-            // DEBUG: dump to console (matching your old code)
+            // Debug: log test matching details
             if (window.cloudflareAbTesting?.debug) {
                 console.log(
                     '[Test]',
