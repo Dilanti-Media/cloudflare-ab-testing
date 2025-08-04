@@ -43,7 +43,7 @@
         if (item && item.event === 'abVariantInit' && item.ab_test && item.ab_variant) {
           // Ensure the event reaches GA4 via gtag if available
           if (typeof gtag !== 'undefined') {
-            const eventName = config.event_name || 'abVariantInit';
+            const eventName = config.eventName || 'abVariantInit';
             gtag('event', eventName, {
               ab_test: item.ab_test,
               ab_variant: item.ab_variant
