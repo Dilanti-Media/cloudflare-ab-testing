@@ -4,7 +4,7 @@ Tags: ab-testing, cloudflare, workers, performance, optimization
 Requires at least: 5.0
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 2.0.3
+Stable tag: 2.0.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -38,6 +38,13 @@ The Cloudflare A/B Testing plugin provides comprehensive A/B testing capabilitie
 4. Deploy workers and configure tests
 
 == Changelog ==
+
+= 2.0.4 =
+* **Critical Fix**: Plugin updater filesystem path compatibility
+* **Fixed**: Use WP_CONTENT_DIR constant for consistent path handling
+* **Enhanced**: Added file verification and detailed error messages
+* **Improved**: Proper file permissions using FS_CHMOD_FILE
+* **Resolved**: Update download and installation failures
 
 = 2.0.3 =
 * **Fixed**: Plugin updater filesystem compatibility for both admin and CLI environments
