@@ -10,8 +10,8 @@
     // 2. Show any A/B related headers from the current page response
     console.log('Page headers (check Network tab for X-AB-* headers)');
     
-    // 3. Force variant B for testing (uncomment the line below)
-    // document.cookie = "AB_HOMEPAGE_TEST=B; path=/; max-age=3600";
+    // 3. Force variant B for testing (uncomment the line below and replace COOKIE_NAME)
+    // document.cookie = "COOKIE_NAME=B; path=/; max-age=3600";
     
     // 4. Override the tracking to always send B (for testing)
     const originalDataLayerPush = window.dataLayer?.push || function() {};
@@ -67,5 +67,5 @@
 // Instructions:
 // 1. Add this script to your page (in console or as a script tag)
 // 2. Check console for debug info
-// 3. To force variant B for testing, uncomment the lines marked above
+// 3. To force variant B for testing, uncomment the cookie line above and replace COOKIE_NAME with your test cookie name (e.g., "AB_HOMEPAGE_TEST")
 // 4. Check Network tab for X-AB-* headers from your Cloudflare Worker
