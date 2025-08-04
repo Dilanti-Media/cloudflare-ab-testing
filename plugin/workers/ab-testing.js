@@ -56,6 +56,22 @@ function logError(...args) {
   console.error(...args);
 }
 
+/**
+ * HTML escape function to prevent XSS vulnerabilities
+ * Escapes characters that could be used to inject malicious HTML
+ */
+function escapeHtml(unsafe) {
+  if (!unsafe || typeof unsafe !== 'string') {
+    return '';
+  }
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Basic config validation
 if (!CONFIG.TIMEOUT_MS) {
   throw new Error('Invalid worker configuration');
@@ -324,14 +340,35 @@ async function handleABTestWithTimeout(request, url, test, env) {
       signal: controller.signal
     });
     
-    // Create response with A/B cookie
-    const newResponse = new Response(response.body, {
+    // Get the response text to inject meta tag
+    let html = await response.text();
+    
+    // Inject meta tag with variant into HTML head for JavaScript to read
+    // HTML-escape values to prevent XSS vulnerabilities
+    // Only replace the first <head> occurrence to handle malformed HTML safely
+    if (html.includes('<head>')) {
+      const escapedVariant = escapeHtml(variant);
+      const escapedTestName = escapeHtml(test.test);
+const metaTag = `<meta name="cf-ab-variant" content="${escapedVariant}">
+<meta name="cf-ab-test" content="${escapedTestName}">`;
+      const newHtml = html.replace(/<head(\s[^>]*)?>/i, `<head$1>\n${metaTag}`);
+      // Validate that the meta tag was injected
+      if (newHtml.includes(metaTag)) {
+        html = newHtml;
+      } else if (env?.DEBUG) {
+        logWarn(env, 'Meta tag injection failed: <head> tag may be malformed or missing');
+      }
+    }
+    
+    // Create response with modified HTML
+    const newResponse = new Response(html, {
       status: response.status,
       statusText: response.statusText,
       headers: response.headers
     });
     
-    // Set A/B test cookie with security flags
+    // Set A/B test cookie with security flags - HttpOnly prevents XSS access
+    // JavaScript reads variant from meta tags, not cookies
     newResponse.headers.set('Set-Cookie', 
       `${test.cookieName}=${variant}; Path=/; Max-Age=${CONFIG.COOKIE_MAX_AGE}; SameSite=Lax; Secure; HttpOnly`);
     
@@ -340,6 +377,13 @@ async function handleABTestWithTimeout(request, url, test, env) {
     newResponse.headers.set('X-Worker-Active', 'true');
     newResponse.headers.set('X-AB-Test', test.test);
     newResponse.headers.set('X-AB-Variant', variant);
+    
+    // Debug headers for easier troubleshooting
+    if (env?.DEBUG) {
+      newResponse.headers.set('X-AB-Debug-Cookie', `${test.cookieName}=${variant}`);
+      newResponse.headers.set('X-AB-Debug-Generated', variant === getVariantFromRequest(request, test.cookieName) ? 'false' : 'true');
+      newResponse.headers.set('X-AB-Debug-Meta-Injected', 'true');
+    }
     
     return newResponse;
     

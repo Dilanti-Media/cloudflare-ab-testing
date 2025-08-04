@@ -1,7 +1,9 @@
 /**
  * Simplified Google Analytics 4 A/B Testing Tracker
  *
- * Basic GA4 tracking for A/B tests with minimal complexity
+ * This script listens for the abVariantInit events that are already being
+ * pushed by the main cloudflare-ab-testing.js script and ensures they
+ * reach GA4 properly. We don't duplicate the tracking logic.
  */
 
 (function() {
@@ -13,7 +15,6 @@
   }
 
   const config = window.cloudflareAbTesting.ga4;
-  const tests = window.cloudflareAbTesting.registry || [];
   const DEBUG = window.cloudflareAbTesting?.debug || false;
 
   function log(message, data) {
@@ -23,120 +24,54 @@
   }
 
   /**
-   * Get cookie value by name
+   * Listen for abVariantInit events in dataLayer and ensure they reach GA4
    */
-  function getCookie(name) {
-    // Input validation
-    if (!name || typeof name !== 'string') {
-      return null;
-    }
-
-    // Escape special regex characters to prevent ReDoS
-    const escapedName = name.replace(/[.*+?^${}()|\\[\]]/g, '\\$&');
-    const match = document.cookie.match(new RegExp('(^|; )' + escapedName + '=([^;]*)'));
-    return match ? decodeURIComponent(match[2]) : null;
-  }
-
-  /**
-   * Check if variant is valid (A or B)
-   */
-  function isValidVariant(variant) {
-    return variant === 'A' || variant === 'B';
-  }
-
-  /**
-   * Send tracking event to GA4
-   */
-  function trackEvent(testName, variant) {
-    try {
-      const eventName = config.eventName || 'ab_test_view';
-      const eventData = {
-        ab_test: testName,
-        ab_variant: variant
-      };
-
-      // Ensure dataLayer exists
-      window.dataLayer = window.dataLayer || [];
-
-      // Send via gtag if available, otherwise use dataLayer
-      if (typeof gtag !== 'undefined') {
-        gtag('event', eventName, eventData);
-        log('Event sent via gtag', { testName, variant });
-      } else {
-        window.dataLayer.push({
-          event: eventName,
-          ...eventData
-        });
-        log('Event sent via dataLayer', { testName, variant });
-      }
-    } catch (error) {
-      console.error('[GA4 A/B] Tracking failed:', error.message);
-    }
-  }
-
-  /**
-   * Initialize A/B test tracking
-   */
-  function initTracking() {
-    const currentPath = window.location.pathname;
-    log('Initializing tracking', { path: currentPath, testsCount: tests.length });
-
-    tests.forEach(test => {
-      // Skip if no cookie name defined
-      if (!test.cookieName) {
-        log('Test missing cookieName - skipping', { test: test.test });
-        return;
-      }
-
-      // Check if test is active on current path
-      const paths = Array.isArray(test.paths) ? test.paths : [];
-      const isActive = paths.some(path =>
-          currentPath === path || currentPath.startsWith(path + '/')
-      );
-
-      if (!isActive) {
-        log('Test inactive on path', { test: test.test, path: currentPath });
-        return;
-      }
-
-      // Get variant from cookie (default to 'A' if not found)
-      let variant = getCookie(test.cookieName);
-      if (!isValidVariant(variant)) {
-        variant = 'A';
-      }
-
-      log('Tracking test', { test: test.test, variant });
-      trackEvent(test.test, variant);
-    });
-  }
-
-  /**
-   * Public API for manual tracking
-   */
-  function exposeAPI() {
-    window.cloudflareAbTesting.ga4.track = function(testName, variant) {
-      if (typeof testName === 'string' && testName.trim().length > 0 && isValidVariant(variant)) {
-        trackEvent(testName, variant);
-      } else {
-        log('Invalid arguments to track():', { testName, variant });
-      }
+  function initGA4Listener() {
+    // Ensure dataLayer exists
+    window.dataLayer = window.dataLayer || [];
+    
+    // Store original push method
+    const originalPush = window.dataLayer.push;
+    
+    // Override push to intercept our A/B test events
+    window.dataLayer.push = function(...args) {
+      // Call original push first
+      const result = originalPush.apply(this, args);
+      
+      // Check each pushed item for our A/B test events
+      args.forEach(item => {
+        if (item && item.event === 'abVariantInit' && item.ab_test && item.ab_variant) {
+          // Ensure the event reaches GA4 via gtag if available
+          if (typeof gtag !== 'undefined') {
+            const eventName = config.eventName || 'abVariantInit';
+            gtag('event', eventName, {
+              ab_test: item.ab_test,
+              ab_variant: item.ab_variant
+            });
+            log('Event forwarded to gtag', { 
+              event: eventName,
+              ab_test: item.ab_test, 
+              ab_variant: item.ab_variant 
+            });
+          } else {
+            log('gtag not available, event only in dataLayer', item);
+          }
+        }
+      });
+      
+      return result;
     };
-
-    window.cloudflareAbTesting.ga4.isEnabled = function() {
-      return config.enabled === true;
-    };
+    
+    log('GA4 listener initialized - will forward abVariantInit events to gtag');
   }
 
   // Initialize when DOM is ready
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initTracking);
+    document.addEventListener('DOMContentLoaded', initGA4Listener);
   } else {
     // DOM already loaded - call directly
-    initTracking();
+    initGA4Listener();
   }
-
-  // Expose public API
-  exposeAPI();
 
   log('GA4 A/B tracker initialized');
 

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>A/B Test Debug Helper</title>
+</head>
+<body>
+    <h1>A/B Test Debug Helper</h1>
+    
+    <div id="debug-info">
+        <h2>Debug Information</h2>
+        <div id="cookie-values"></div>
+        <div id="tracking-events"></div>
+        <div id="variant-info"></div>
+    </div>
+    
+    <script>
+        // Debug helper to see what's happening with A/B tests
+        
+        // 1. Display all relevant cookies
+        function displayCookies() {
+            const cookieDiv = document.getElementById('cookie-values');
+            const cookies = document.cookie.split(';');
+            let abCookies = [];
+            
+            cookies.forEach(cookie => {
+                const [name, value] = cookie.trim().split('=');
+                if (name.startsWith('AB_')) {
+                    abCookies.push(`${name} = ${value}`);
+                }
+            });
+            
+            cookieDiv.innerHTML = '<h3>A/B Test Cookies:</h3><pre>' + 
+                (abCookies.length > 0 ? abCookies.join('\n') : 'No A/B test cookies found') + 
+                '</pre>';
+        }
+        
+        // 2. Intercept dataLayer events
+        const originalDataLayer = window.dataLayer || [];
+        window.dataLayer = [];
+        const capturedEvents = [];
+        
+        // Override push to capture events
+        window.dataLayer.push = function(...args) {
+            args.forEach(event => {
+                if (event && event.event === 'abVariantInit') {
+                    capturedEvents.push(event);
+                    console.log('A/B Test Event Captured:', event);
+                }
+            });
+            return originalDataLayer.push.apply(originalDataLayer, args);
+        };
+        
+        // 3. Display captured events after a delay
+        setTimeout(() => {
+            const eventsDiv = document.getElementById('tracking-events');
+            eventsDiv.innerHTML = '<h3>Captured A/B Test Events:</h3><pre>' + 
+                (capturedEvents.length > 0 ? JSON.stringify(capturedEvents, null, 2) : 'No A/B test events captured') + 
+                '</pre>';
+        }, 2000);
+        
+        // 4. Display page info
+        function displayPageInfo() {
+            const variantDiv = document.getElementById('variant-info');
+            const info = {
+                'Current Path': window.location.pathname,
+                'Full URL': window.location.href,
+                'User Agent': navigator.userAgent.substring(0, 100) + '...',
+                'Cloudflare Headers': 'Check browser dev tools Network tab for X-AB-* headers'
+            };
+            
+            let infoHtml = '<h3>Page Information:</h3><table border="1"><tr><th>Property</th><th>Value</th></tr>';
+            for (const [key, value] of Object.entries(info)) {
+                infoHtml += `<tr><td>${key}</td><td>${value}</td></tr>`;
+            }
+            infoHtml += '</table>';
+            
+            variantDiv.innerHTML = infoHtml;
+        }
+        
+        // Initialize debug display
+        displayCookies();
+        displayPageInfo();
+        
+        // Refresh cookies every 5 seconds to see changes
+        setInterval(displayCookies, 5000);
+    </script>
+</body>
+</html>
