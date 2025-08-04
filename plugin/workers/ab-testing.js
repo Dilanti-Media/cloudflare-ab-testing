@@ -348,8 +348,7 @@ async function handleABTestWithTimeout(request, url, test, env) {
     if (html.includes('<head>')) {
       const escapedVariant = escapeHtml(variant);
       const escapedTestName = escapeHtml(test.test);
-      const metaTag = `<meta name="cf-ab-variant" content="${escapedVariant}">
-      <meta name="cf-ab-test" content="${escapedTestName}">`;
+      const metaTag = `<meta name="cf-ab-variant" content="${escapedVariant}">\n      <meta name="cf-ab-test" content="${escapedTestName}">`;
       html = html.replace('<head>', `<head>\n${metaTag}`);
     }
     
