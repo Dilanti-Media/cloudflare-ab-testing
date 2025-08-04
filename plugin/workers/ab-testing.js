@@ -345,6 +345,7 @@ async function handleABTestWithTimeout(request, url, test, env) {
     
     // Inject meta tag with variant into HTML head for JavaScript to read
     // HTML-escape values to prevent XSS vulnerabilities
+    // Only replace the first <head> occurrence to handle malformed HTML safely
     if (html.includes('<head>')) {
       const escapedVariant = escapeHtml(variant);
       const escapedTestName = escapeHtml(test.test);

@@ -39,7 +39,7 @@
             return urlVariant;
         }
 
-        // 3. Check cookie (fallback only - might be stale due to caching, and HttpOnly for security)
+        // 3. Check cookie (fallback only - might be stale due to caching; note: if the cookie is set as HttpOnly, it cannot be accessed via JavaScript and this fallback will not work)
         const cookieVariant = getCookieValue(cookieName);
         if (cookieVariant === 'A' || cookieVariant === 'B') {
             return cookieVariant;
@@ -123,25 +123,25 @@
     }
 
     /**
-     * Initialize with retry mechanism for cookie reading
+     * Initialize with retry mechanism for meta tag detection
      */
     function initializeWithRetry() {
         // Try immediately first
         initializeAbTests();
         
-        // If we're in a cached environment, cookies might not be set yet
-        // Try again after a short delay to catch late-set cookies
+        // Retry to catch meta tags that might be injected after initial script execution
+        // This handles cases where the DOM is not fully ready or meta tags are dynamically added
         setTimeout(() => {
             if (window.cloudflareAbTesting?.debug) {
-                console.log('[A/B Debug] Running delayed retry to catch late cookies...');
+                console.log('[A/B Debug] Running delayed retry to check for meta tags...');
             }
             initializeAbTests();
         }, 100);
         
-        // One more try after page load completes
+        // One more try after page load completes to ensure meta tags are available
         setTimeout(() => {
             if (window.cloudflareAbTesting?.debug) {
-                console.log('[A/B Debug] Running final retry after page load...');
+                console.log('[A/B Debug] Running final retry after page load for meta tags...');
             }
             initializeAbTests();
         }, 1000);
