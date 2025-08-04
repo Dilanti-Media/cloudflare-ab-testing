@@ -39,7 +39,7 @@
             return urlVariant;
         }
 
-        // 3. Check cookie (but this might be stale due to caching)
+        // 3. Check cookie (fallback only - might be stale due to caching, and HttpOnly for security)
         const cookieVariant = getCookieValue(cookieName);
         if (cookieVariant === 'A' || cookieVariant === 'B') {
             return cookieVariant;

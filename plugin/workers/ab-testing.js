@@ -341,9 +341,10 @@ async function handleABTestWithTimeout(request, url, test, env) {
       headers: response.headers
     });
     
-    // Set A/B test cookie with security flags
+    // Set A/B test cookie with security flags - HttpOnly prevents XSS access
+    // JavaScript reads variant from meta tags, not cookies
     newResponse.headers.set('Set-Cookie', 
-      `${test.cookieName}=${variant}; Path=/; Max-Age=${CONFIG.COOKIE_MAX_AGE}; SameSite=Lax; Secure`);
+      `${test.cookieName}=${variant}; Path=/; Max-Age=${CONFIG.COOKIE_MAX_AGE}; SameSite=Lax; Secure; HttpOnly`);
     
     // Add cache-aware headers - prevent WordPress from serving wrong variant
     newResponse.headers.set('Vary', 'Cookie');
