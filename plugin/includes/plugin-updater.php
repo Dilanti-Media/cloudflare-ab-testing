@@ -128,18 +128,44 @@ class Cloudflare_AB_Plugin_Updater {
                 return new WP_Error( 'download_failed', 'Failed to download update package: ' . $response->get_error_message() );
             }
 
-            $upgrade_folder = $upgrader->skin->wp_filesystem->wp_content_dir() . 'upgrade/';
+            // Use WP_Filesystem properly - handle both admin and CLI environments
+            if ( isset( $upgrader->skin->wp_filesystem ) && is_object( $upgrader->skin->wp_filesystem ) ) {
+                $fs = $upgrader->skin->wp_filesystem;
+            } else {
+                global $wp_filesystem;
+                if ( ! $wp_filesystem ) {
+                    if ( function_exists( 'WP_Filesystem' ) ) {
+                        WP_Filesystem();
+                    }
+                    $fs = $wp_filesystem;
+                } else {
+                    $fs = $wp_filesystem;
+                }
+            }
+            
+            if ( ! $fs || ! is_object( $fs ) ) {
+                return new WP_Error( 'filesystem_error', 'WordPress filesystem not available' );
+            }
+            
+            $upgrade_folder = $fs->wp_content_dir() . 'upgrade/';
             $filename = 'cloudflare-ab-testing-update.zip';
             $full_path = $upgrade_folder . $filename;
 
+            // Ensure we have a valid filesystem object
+            if ( empty( $fs ) || ! is_object( $fs ) ) {
+                return new WP_Error( 'filesystem_error', 'Cannot access WordPress filesystem' );
+            }
+
             // Create upgrade directory if it doesn't exist
-            if ( ! $upgrader->skin->wp_filesystem->is_dir( $upgrade_folder ) ) {
-                $upgrader->skin->wp_filesystem->mkdir( $upgrade_folder, 0755 );
+            if ( ! $fs->is_dir( $upgrade_folder ) ) {
+                if ( ! $fs->mkdir( $upgrade_folder, 0755 ) ) {
+                    return new WP_Error( 'mkdir_failed', 'Failed to create upgrade directory' );
+                }
             }
 
             // Write the file
-            if ( ! $upgrader->skin->wp_filesystem->put_contents( $full_path, wp_remote_retrieve_body( $response ), 0644 ) ) {
-                return new WP_Error( 'download_failed', 'Failed to write update file' );
+            if ( ! $fs->put_contents( $full_path, wp_remote_retrieve_body( $response ), 0644 ) ) {
+                return new WP_Error( 'download_failed', 'Failed to write update file to filesystem' );
             }
 
             return $full_path;
@@ -157,6 +183,34 @@ class Cloudflare_AB_Plugin_Updater {
             delete_site_transient( 'update_plugins' );
             delete_transient( 'cloudflare_ab_remote_version' );
             delete_transient( 'cloudflare_ab_remote_info' );
+            
+            // Ensure maintenance mode is cleaned up (belt and suspenders approach)
+            $maintenance_file = ABSPATH . '.maintenance';
+            if ( file_exists( $maintenance_file ) ) {
+                @unlink( $maintenance_file );
+            }
+            
+            // Clean up any upgrade temp files
+            $upgrade_dir = WP_CONTENT_DIR . '/upgrade/';
+            if ( is_dir( $upgrade_dir ) ) {
+                $this->clean_upgrade_directory( $upgrade_dir );
+            }
+            
+            do_action( 'cloudflare_ab_after_plugin_update' );
+        }
+    }
+
+    /**
+     * Clean upgrade directory safely
+     */
+    private function clean_upgrade_directory( $dir ) {
+        $files = glob( $dir . 'cloudflare-ab-testing-*' );
+        if ( $files ) {
+            foreach ( $files as $file ) {
+                if ( is_file( $file ) ) {
+                    @unlink( $file );
+                }
+            }
         }
     }
 
