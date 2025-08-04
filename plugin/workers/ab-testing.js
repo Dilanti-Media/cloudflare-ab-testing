@@ -324,8 +324,18 @@ async function handleABTestWithTimeout(request, url, test, env) {
       signal: controller.signal
     });
     
-    // Create response with A/B cookie
-    const newResponse = new Response(response.body, {
+    // Get the response text to inject meta tag
+    let html = await response.text();
+    
+    // Inject meta tag with variant into HTML head for JavaScript to read
+    if (html.includes('<head>')) {
+      const metaTag = `<meta name="cf-ab-variant" content="${variant}">
+      <meta name="cf-ab-test" content="${test.test}">`;
+      html = html.replace('<head>', `<head>\n${metaTag}`);
+    }
+    
+    // Create response with modified HTML
+    const newResponse = new Response(html, {
       status: response.status,
       statusText: response.statusText,
       headers: response.headers
@@ -333,13 +343,20 @@ async function handleABTestWithTimeout(request, url, test, env) {
     
     // Set A/B test cookie with security flags
     newResponse.headers.set('Set-Cookie', 
-      `${test.cookieName}=${variant}; Path=/; Max-Age=${CONFIG.COOKIE_MAX_AGE}; SameSite=Lax; Secure; HttpOnly`);
+      `${test.cookieName}=${variant}; Path=/; Max-Age=${CONFIG.COOKIE_MAX_AGE}; SameSite=Lax; Secure`);
     
     // Add cache-aware headers - prevent WordPress from serving wrong variant
     newResponse.headers.set('Vary', 'Cookie');
     newResponse.headers.set('X-Worker-Active', 'true');
     newResponse.headers.set('X-AB-Test', test.test);
     newResponse.headers.set('X-AB-Variant', variant);
+    
+    // Debug headers for easier troubleshooting
+    if (env?.DEBUG) {
+      newResponse.headers.set('X-AB-Debug-Cookie', `${test.cookieName}=${variant}`);
+      newResponse.headers.set('X-AB-Debug-Generated', variant === getVariantFromRequest(request, test.cookieName) ? 'false' : 'true');
+      newResponse.headers.set('X-AB-Debug-Meta-Injected', 'true');
+    }
     
     return newResponse;
     

@@ -3,6 +3,9 @@
 
     // Data passed from WordPress is available in `cloudflareAbTesting.registry`
     const registry = window.cloudflareAbTesting?.registry || [];
+    
+    // Track which tests have already been processed to prevent duplicates
+    const processedTests = new Set();
 
     if (!registry || registry.length === 0) {
         return;
@@ -20,6 +23,33 @@
     }
 
     /**
+     * Get variant from multiple sources in order of reliability
+     */
+    function getActualVariant(cookieName) {
+        // 1. Check if Cloudflare Worker set headers (most reliable)
+        const workerVariant = document.querySelector('meta[name="cf-ab-variant"]')?.content;
+        if (workerVariant === 'A' || workerVariant === 'B') {
+            return workerVariant;
+        }
+
+        // 2. Check URL parameter (for testing)
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlVariant = urlParams.get(cookieName);
+        if (urlVariant === 'A' || urlVariant === 'B') {
+            return urlVariant;
+        }
+
+        // 3. Check cookie (but this might be stale due to caching)
+        const cookieVariant = getCookieValue(cookieName);
+        if (cookieVariant === 'A' || cookieVariant === 'B') {
+            return cookieVariant;
+        }
+
+        // 4. Default to A if nothing found
+        return 'A';
+    }
+
+    /**
      * Processes all registered A/B tests.
      */
     function initializeAbTests() {
@@ -27,45 +57,101 @@
         window.dataLayer = window.dataLayer || [];
 
         registry.forEach(entry => {
-            // Check if the current path matches any of the test's specified paths.
-            // A match occurs if the path is identical or if it's a sub-path (e.g., /pricing/ matches /pricing/new-plan).
-            const isActive = entry.paths.some(prefix => {
-                if (path === prefix) return true;
-                // Ensure trailing slash for prefix matching to avoid incorrect matches (e.g., /page matching /page-two).
-                const normalizedPrefix = prefix.endsWith('/') ? prefix : `${prefix}/`;
-                return path.startsWith(normalizedPrefix);
-            });
+            // Skip if we've already processed this test
+            const testKey = `${entry.test}-${path}`;
+            if (processedTests.has(testKey)) {
+                if (window.cloudflareAbTesting?.debug) {
+                    console.log('[A/B Debug] Skipping already processed test:', entry.test);
+                }
+                return;
+            }
+
+            // Use the same path matching logic as your old working code
+            const isActive = entry.paths.some(prefix =>
+                path === prefix || path.startsWith(prefix + '/')
+            );
+
+            // DEBUG: dump to console (matching your old code)
+            if (window.cloudflareAbTesting?.debug) {
+                console.log(
+                    '[Test]',
+                    'test:', entry.test,
+                    'paths:', entry.paths,
+                    'current path:', path,
+                    'match?', isActive
+                );
+            }
 
             if (!isActive) {
                 return;
             }
 
-            // Read the cookie for this test.
-            let variant = getCookieValue(entry.cookieName);
+            // Get variant from multiple sources
+            const variant = getActualVariant(entry.cookieName);
+            const cookieValue = getCookieValue(entry.cookieName);
 
-            // If no cookie is found (e.g., first visit, cache race), default to 'A'.
-            // The Cloudflare worker is the source of truth and will set the definitive cookie.
-            if (variant !== 'A' && variant !== 'B') {
-                variant = 'A';
+            // Enhanced debugging
+            if (window.cloudflareAbTesting?.debug) {
+                console.log('[A/B Debug] Test:', entry.test, {
+                    'Cookie Value': cookieValue,
+                    'Final Variant': variant,
+                    'Cookie Name': entry.cookieName,
+                    'All Cookies': document.cookie,
+                    'Meta Tag': document.querySelector('meta[name="cf-ab-variant"]')?.content,
+                    'URL Params': window.location.search
+                });
             }
 
-            // Push the test information to the dataLayer for analytics.
-            window.dataLayer.push({
-                event: 'abVariantInit',
-                ab_test: entry.test,      // e.g., "pricing_button"
-                ab_variant: variant       // "A" or "B"
-            });
+            // Mark this test as processed
+            processedTests.add(testKey);
 
-            // Note: Debug logging removed to avoid confusion from stale cookie values
-            // The Worker sets headers/cookies, but JS may read stale values causing misleading debug info
+            // Push one dataLayer event carrying both the slug and variant
+            // Using exact same structure as your old working code
+            const eventData = {
+                event: 'abVariantInit',
+                ab_test: entry.test,      // e.g. "pricing_button"
+                ab_variant: variant       // "A" or "B"
+            };
+
+            window.dataLayer.push(eventData);
+
+            if (window.cloudflareAbTesting?.debug) {
+                console.log('[GA4 Tracking] Pushed event:', eventData);
+                console.log('[GA4 Tracking] Current dataLayer:', window.dataLayer);
+            }
         });
+    }
+
+    /**
+     * Initialize with retry mechanism for cookie reading
+     */
+    function initializeWithRetry() {
+        // Try immediately first
+        initializeAbTests();
+        
+        // If we're in a cached environment, cookies might not be set yet
+        // Try again after a short delay to catch late-set cookies
+        setTimeout(() => {
+            if (window.cloudflareAbTesting?.debug) {
+                console.log('[A/B Debug] Running delayed retry to catch late cookies...');
+            }
+            initializeAbTests();
+        }, 100);
+        
+        // One more try after page load completes
+        setTimeout(() => {
+            if (window.cloudflareAbTesting?.debug) {
+                console.log('[A/B Debug] Running final retry after page load...');
+            }
+            initializeAbTests();
+        }, 1000);
     }
 
     // Run the logic once the DOM is ready.
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initializeAbTests);
+        document.addEventListener('DOMContentLoaded', initializeWithRetry);
     } else {
-        initializeAbTests();
+        initializeWithRetry();
     }
 
     // Visual debug indicator removed to avoid confusion from stale cookie values
