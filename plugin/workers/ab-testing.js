@@ -56,6 +56,22 @@ function logError(...args) {
   console.error(...args);
 }
 
+/**
+ * HTML escape function to prevent XSS vulnerabilities
+ * Escapes characters that could be used to inject malicious HTML
+ */
+function escapeHtml(unsafe) {
+  if (!unsafe || typeof unsafe !== 'string') {
+    return '';
+  }
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Basic config validation
 if (!CONFIG.TIMEOUT_MS) {
   throw new Error('Invalid worker configuration');
@@ -328,9 +344,12 @@ async function handleABTestWithTimeout(request, url, test, env) {
     let html = await response.text();
     
     // Inject meta tag with variant into HTML head for JavaScript to read
+    // HTML-escape values to prevent XSS vulnerabilities
     if (html.includes('<head>')) {
-      const metaTag = `<meta name="cf-ab-variant" content="${variant}">
-      <meta name="cf-ab-test" content="${test.test}">`;
+      const escapedVariant = escapeHtml(variant);
+      const escapedTestName = escapeHtml(test.test);
+      const metaTag = `<meta name="cf-ab-variant" content="${escapedVariant}">
+      <meta name="cf-ab-test" content="${escapedTestName}">`;
       html = html.replace('<head>', `<head>\n${metaTag}`);
     }
     
