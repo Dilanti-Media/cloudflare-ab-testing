@@ -147,7 +147,8 @@ class Cloudflare_AB_Plugin_Updater {
                 return new WP_Error( 'filesystem_error', 'WordPress filesystem not available' );
             }
             
-            $upgrade_folder = $fs->wp_content_dir() . 'upgrade/';
+            // Use WordPress constants for consistent path handling
+            $upgrade_folder = WP_CONTENT_DIR . '/upgrade/';
             $filename = 'cloudflare-ab-testing-update.zip';
             $full_path = $upgrade_folder . $filename;
 
@@ -159,13 +160,18 @@ class Cloudflare_AB_Plugin_Updater {
             // Create upgrade directory if it doesn't exist
             if ( ! $fs->is_dir( $upgrade_folder ) ) {
                 if ( ! $fs->mkdir( $upgrade_folder, 0755 ) ) {
-                    return new WP_Error( 'mkdir_failed', 'Failed to create upgrade directory' );
+                    return new WP_Error( 'mkdir_failed', 'Failed to create upgrade directory: ' . $upgrade_folder );
                 }
             }
 
-            // Write the file
-            if ( ! $fs->put_contents( $full_path, wp_remote_retrieve_body( $response ), 0644 ) ) {
-                return new WP_Error( 'download_failed', 'Failed to write update file to filesystem' );
+            // Write the file using filesystem
+            if ( ! $fs->put_contents( $full_path, wp_remote_retrieve_body( $response ), FS_CHMOD_FILE ) ) {
+                return new WP_Error( 'download_failed', 'Failed to write update file to filesystem: ' . $full_path );
+            }
+
+            // Verify file exists
+            if ( ! $fs->exists( $full_path ) ) {
+                return new WP_Error( 'file_not_found', 'Update file was not created: ' . $full_path );
             }
 
             return $full_path;
