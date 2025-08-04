@@ -350,7 +350,13 @@ async function handleABTestWithTimeout(request, url, test, env) {
       const escapedVariant = escapeHtml(variant);
       const escapedTestName = escapeHtml(test.test);
 const metaTag = `<meta name="cf-ab-variant" content="${escapedVariant}">\n<meta name="cf-ab-test" content="${escapedTestName}">`;
-      html = html.replace(/<head(\s[^>]*)?>/i, `<head$1>\n${metaTag}`);
+      const newHtml = html.replace(/<head(\s[^>]*)?>/i, `<head$1>\n${metaTag}`);
+      // Validate that the meta tag was injected
+      if (newHtml.includes(metaTag)) {
+        html = newHtml;
+      } else if (env?.DEBUG) {
+        logWarn(env, 'Meta tag injection failed: <head> tag may be malformed or missing');
+      }
     }
     
     // Create response with modified HTML
