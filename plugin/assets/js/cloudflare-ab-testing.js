@@ -66,12 +66,12 @@
                 return;
             }
 
-            // Use the same path matching logic as your old working code
+            // Use consistent path matching logic for A/B test activation
             const isActive = entry.paths.some(prefix =>
                 path === prefix || path.startsWith(prefix + '/')
             );
 
-            // DEBUG: dump to console (matching your old code)
+            // Debug: log test matching details
             if (window.cloudflareAbTesting?.debug) {
                 console.log(
                     '[Test]',
@@ -106,7 +106,7 @@
             processedTests.add(testKey);
 
             // Push one dataLayer event carrying both the slug and variant
-            // Using exact same structure as your old working code
+            // Push dataLayer event with consistent structure
             const eventData = {
                 event: 'abVariantInit',
                 ab_test: entry.test,      // e.g. "pricing_button"
