@@ -66,7 +66,7 @@
                 return;
             }
 
-            // Use the same path matching logic as your old working code
+            // Use consistent path matching logic for A/B test activation
             const isActive = entry.paths.some(prefix =>
                 path === prefix || path.startsWith(prefix + '/')
             );
