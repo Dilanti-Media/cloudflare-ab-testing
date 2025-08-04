@@ -27,7 +27,7 @@ class Cloudflare_AB_Plugin_Updater {
 
         add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'check_for_update' ) );
         add_filter( 'plugins_api', array( $this, 'plugin_info' ), 20, 3 );
-        add_filter( 'upgrader_pre_download', array( $this, 'download_package' ), 10, 3 );
+        add_filter( 'upgrader_pre_download', array( $this, 'maybe_authenticate_download' ), 10, 3 );
         add_action( 'upgrader_process_complete', array( $this, 'after_update' ), 10, 2 );
     }
 
@@ -106,80 +106,22 @@ class Cloudflare_AB_Plugin_Updater {
         );
     }
 
+    
     /**
-     * Download the update package
+     * Add authentication for GitHub downloads if needed
      */
-    public function download_package( $reply, $package, $upgrader ) {
+    public function maybe_authenticate_download( $reply, $package, $upgrader ) {
         if ( strpos( $package, 'github.com' ) !== false &&
              strpos( $package, $this->github_repo ) !== false ) {
-
-            $args = array(
-                'timeout' => 300,
-                'headers' => array()
-            );
-
-            if ( ! empty( $this->github_token ) ) {
-                $args['headers']['Authorization'] = 'token ' . $this->github_token;
-            }
-
-            $response = wp_remote_get( $package, $args );
-
-            if ( is_wp_error( $response ) ) {
-                return new WP_Error( 'download_failed', 'Failed to download update package: ' . $response->get_error_message() );
-            }
-
-            // Use WP_Filesystem properly - handle both admin and CLI environments
-            if ( isset( $upgrader->skin->wp_filesystem ) && is_object( $upgrader->skin->wp_filesystem ) ) {
-                $fs = $upgrader->skin->wp_filesystem;
-            } else {
-                global $wp_filesystem;
-                if ( ! $wp_filesystem ) {
-                    if ( function_exists( 'WP_Filesystem' ) ) {
-                        WP_Filesystem();
-                    }
-                    $fs = $wp_filesystem;
-                } else {
-                    $fs = $wp_filesystem;
-                }
-            }
             
-            if ( ! $fs || ! is_object( $fs ) ) {
-                return new WP_Error( 'filesystem_error', 'WordPress filesystem not available' );
-            }
-            
-            // Use WordPress constants for consistent path handling
-            $upgrade_folder = WP_CONTENT_DIR . '/upgrade/';
-            $filename = 'cloudflare-ab-testing-update.zip';
-            $full_path = $upgrade_folder . $filename;
-
-            // Ensure we have a valid filesystem object
-            if ( empty( $fs ) || ! is_object( $fs ) ) {
-                return new WP_Error( 'filesystem_error', 'Cannot access WordPress filesystem' );
-            }
-
-            // Create upgrade directory if it doesn't exist
-            if ( ! $fs->is_dir( $upgrade_folder ) ) {
-                if ( ! $fs->mkdir( $upgrade_folder, 0755 ) ) {
-                    return new WP_Error( 'mkdir_failed', 'Failed to create upgrade directory: ' . $upgrade_folder );
-                }
-            }
-
-            // Write the file using filesystem
-            if ( ! $fs->put_contents( $full_path, wp_remote_retrieve_body( $response ), FS_CHMOD_FILE ) ) {
-                return new WP_Error( 'download_failed', 'Failed to write update file to filesystem: ' . $full_path );
-            }
-
-            // Verify file exists
-            if ( ! $fs->exists( $full_path ) ) {
-                return new WP_Error( 'file_not_found', 'Update file was not created: ' . $full_path );
-            }
-
-            return $full_path;
+            // For public repositories, let WordPress handle the download normally
+            // For private repos, we would add authentication here
+            return false; // Let WordPress handle the download
         }
-
+        
         return $reply;
     }
-
+    
     /**
      * Actions to perform after update
      */
