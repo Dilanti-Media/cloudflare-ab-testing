@@ -105,7 +105,7 @@
             // Mark this test as processed
             processedTests.add(testKey);
 
-            // Push one dataLayer event carrying both the slug and variant
+            // Push one dataLayer event carrying both the test name and variant
             // Push dataLayer event with consistent structure
             const eventData = {
                 event: 'abVariantInit',
