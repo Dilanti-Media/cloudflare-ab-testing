@@ -106,7 +106,7 @@
             processedTests.add(testKey);
 
             // Push one dataLayer event carrying both the slug and variant
-            // Using exact same structure as your old working code
+            // Push dataLayer event with consistent structure
             const eventData = {
                 event: 'abVariantInit',
                 ab_test: entry.test,      // e.g. "pricing_button"
