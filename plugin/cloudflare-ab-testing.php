@@ -3,7 +3,7 @@
  * Plugin Name:       Cloudflare A/B Testing
  * Plugin URI:        https://dilantimedia.com/
  * Description:       Provides A/B testing capabilities integrated with Cloudflare Workers.
- * Version:           2.0.7
+ * Version:           2.1.0
  * Author:            Dilanti Media
  * Author URI:        https://dilantimedia.com/
  * License:           GPL-2.0+
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit; // Exit if accessed directly
 }
 
-define( 'CLOUDFLARE_AB_TESTING_VERSION', '2.0.7' );
+define( 'CLOUDFLARE_AB_TESTING_VERSION', '2.1.0' );
 define( 'CLOUDFLARE_AB_TESTING_URL', plugin_dir_url( __FILE__ ) );
 
 // Include the new files
@@ -80,7 +80,11 @@ add_action( 'wp_ajax_cloudflare_ab_save_worker_version', 'cloudflare_ab_save_wor
 
 function cloudflare_ab_enqueue_assets() {
     // Force no-caching headers for debugging (only when debug mode is enabled)
-    if ( ! headers_sent() && ( ( defined( 'WP_DEBUG' ) && WP_DEBUG ) || ( is_user_logged_in() && current_user_can( 'manage_options' ) ) ) ) {
+    $debug_enabled = ( 
+        ( isset( $_GET['ab_debug'] ) && $_GET['ab_debug'] === '1' && is_user_logged_in() && current_user_can( 'manage_options' ) )
+    );
+    
+    if ( ! headers_sent() && $debug_enabled ) {
         header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
         header("Pragma: no-cache");
         header("Expires: 0");
@@ -122,7 +126,10 @@ function cloudflare_ab_enqueue_assets() {
     
     $js_config = [
         'registry' => $tests,
-        'debug' => ( ( is_user_logged_in() && current_user_can( 'manage_options' ) ) || ( defined( 'WP_DEBUG' ) && WP_DEBUG ) )
+        'debug' => ( 
+            // Only enable debug if explicitly requested via URL parameter AND user is admin
+            ( isset( $_GET['ab_debug'] ) && $_GET['ab_debug'] === '1' && is_user_logged_in() && current_user_can( 'manage_options' ) )
+        )
     ];
     
     // Add GA4 configuration if enabled

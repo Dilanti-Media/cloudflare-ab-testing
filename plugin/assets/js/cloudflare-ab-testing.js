@@ -23,30 +23,48 @@
     }
 
     /**
-     * Get variant from multiple sources in order of reliability
+     * Get variant from Cloudflare Worker servers (meta tag or headers)
+     * This trusts the worker's actual assignment, bypassing cookies entirely
      */
     function getActualVariant(cookieName) {
-        // 1. Check if Cloudflare Worker set headers (most reliable)
-        const workerVariant = document.querySelector('meta[name="cf-ab-variant"]')?.content;
+        // Primary: Check Cloudflare Worker meta tag (server-assigned)
+        const workerVariant = document.querySelector('meta[name="cf-ab-variant"]')?.content?.trim();
         if (workerVariant === 'A' || workerVariant === 'B') {
+            if (window.cloudflareAbTesting?.debug) {
+                console.log(`[Variant] Worker assigned: ${workerVariant} for ${cookieName}`);
+            }
             return workerVariant;
         }
 
-        // 2. Check URL parameter (for testing)
+        // Debug: Check why meta tag is missing
+        if (window.cloudflareAbTesting?.debug) {
+            const allVariantMeta = document.querySelectorAll('meta[name="cf-ab-variant"]');
+            const allTestMeta = document.querySelectorAll('meta[name="cf-ab-test"]');
+            console.log(`[Variant Debug] Meta tags for ${cookieName}:`, {
+                variantsFound: allVariantMeta.length,
+                testsFound: allTestMeta.length,
+                available: Array.from(allTestMeta).map(m => ({test: m.content, variant: allVariantMeta[0]?.content}))
+            });
+        }
+
+        // URL parameter (for manual testing/debugging)
         const urlParams = new URLSearchParams(window.location.search);
         const urlVariant = urlParams.get(cookieName);
         if (urlVariant === 'A' || urlVariant === 'B') {
             return urlVariant;
         }
 
-        // 3. Check cookie (fallback only - might be stale due to caching; note: if the cookie is set as HttpOnly, it cannot be accessed via JavaScript and this fallback will not work)
-        const cookieVariant = getCookieValue(cookieName);
-        if (cookieVariant === 'A' || cookieVariant === 'B') {
-            return cookieVariant;
+        // Issue warning if no worker signal
+        if (window.cloudflareAbTesting?.debug) {
+            console.warn(`[Variant Error] Worker meta tag missing for test ${cookieName}. Check:
+              1. Worker deployment
+              2. Test path matching
+              3. Cache invalidation
+              Current HTML has: document.querySelector('meta[name="cf-ab-variant"]') = ${document.querySelector('meta[name="cf-ab-variant"]')}
+            `);
         }
 
-        // 4. Default to A if nothing found
-        return 'A';
+        return 'A'; // Safe fallback - indicates configuration issue
     }
 
     /**

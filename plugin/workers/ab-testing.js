@@ -345,20 +345,26 @@ async function handleABTestWithTimeout(request, url, test, env) {
     
     // Inject meta tag with variant into HTML head for JavaScript to read
     // HTML-escape values to prevent XSS vulnerabilities
-    // Only replace the first <head> occurrence to handle malformed HTML safely
-    if (html.includes('<head>')) {
-      const escapedVariant = escapeHtml(variant);
-      const escapedTestName = escapeHtml(test.test);
-const metaTag = `<meta name="cf-ab-variant" content="${escapedVariant}">
+    // Force injection of meta tags for all HTML responses
+    // This bypasses any HTML structure checking to ensure meta tags always appear
+    const escapedVariant = escapeHtml(variant);
+    const escapedTestName = escapeHtml(test.test);
+    const metaTag = `<meta name="cf-ab-variant" content="${escapedVariant}">
 <meta name="cf-ab-test" content="${escapedTestName}">`;
-      const newHtml = html.replace(/<head(\s[^>]*)?>/i, `<head$1>\n${metaTag}`);
-      // Validate that the meta tag was injected
-      if (newHtml.includes(metaTag)) {
-        html = newHtml;
-      } else if (env?.DEBUG) {
-        logWarn(env, 'Meta tag injection failed: <head> tag may be malformed or missing');
-      }
-    }
+    
+    // Force injection into any HTML response regardless of structure
+    html = html.replace(/(<head[^>]*>)/i, `$1
+${metaTag}
+`) || 
+         html.replace(/(<html[^>]*>)/i, `$1
+<head>
+${metaTag}
+</head>
+`) || 
+         html.replace(/(^|<!DOCTYPE[^>]*>)/i, `$1<head>
+${metaTag}
+</head>
+`);
     
     // Create response with modified HTML
     const newResponse = new Response(html, {
