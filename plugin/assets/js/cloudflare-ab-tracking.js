@@ -1,20 +1,23 @@
 /**
  * Simplified Google Analytics 4 A/B Testing Tracker
  *
- * This script listens for the abVariantInit events that are already being
- * pushed by the main cloudflare-ab-testing.js script and ensures they
- * reach GA4 properly. We don't duplicate the tracking logic.
+ * Basic GA4 tracking for A/B tests with minimal complexity
  */
 
 (function() {
   'use strict';
+
+  console.log(gtag);
 
   // Exit early if not configured
   if (!window.cloudflareAbTesting?.ga4) {
     return;
   }
 
+  console.log(gtag);
+
   const config = window.cloudflareAbTesting.ga4;
+  const tests = window.cloudflareAbTesting.registry || [];
   const DEBUG = window.cloudflareAbTesting?.debug || false;
 
   function log(message, data) {
@@ -24,229 +27,124 @@
   }
 
   /**
-   * Verify GA4 configuration and availability
+   * Get variant from meta tag (primary) or URL parameter (fallback)
    */
-  function verifyGA4Setup() {
-    const checks = {
-      gtagDefined: typeof gtag !== 'undefined',
-      dataLayerExists: !!(window.dataLayer),
-      ga4Enabled: !!(config && config.enabled),
-      gaIDPresent: !!(window.gtag && window.gtag.config && Object.keys(window.gtag.config))
-    };
-    
-    log('GA4 Setup Verification:', checks);
-    return checks;
+  function getVariant(cookieName) {
+    // Primary: Check Cloudflare Worker meta tag
+    const metaVariant = document.querySelector('meta[name="cf-ab-variant"]')?.content?.trim();
+    if (metaVariant === 'A' || metaVariant === 'B') {
+      return metaVariant;
+    }
+
+    // Fallback: URL parameter (for debugging)
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlVariant = urlParams.get(cookieName);
+    if (urlVariant === 'A' || urlVariant === 'B') {
+      return urlVariant;
+    }
+
+    return 'A'; // Default fallback
   }
-  
+
   /**
-   * Enhanced GA4 event tracking with validation
+   * Check if variant is valid (A or B)
    */
-  function trackEvent(eventData, validation = true) {
-    const enrichedData = {
-      ...eventData,
-      ab_timestamp: Date.now(),
-      ab_session_id: window.cloudflareAbTesting?.sessionId || 'default'
-    };
-    
-    // Add debugging metadata in debug mode
-    if (DEBUG) {
-      enrichedData.ab_debug = {
-        userAgent: navigator.userAgent,
-        timestamp: new Date().toISOString(),
-        url: window.location.href,
-        referrer: document.referrer
+  function isValidVariant(variant) {
+    return variant === 'A' || variant === 'B';
+  }
+
+  /**
+   * Send tracking event to GA4
+   */
+  function trackEvent(testName, variant) {
+    try {
+      const eventName = config.eventName || 'ab_test_view';
+      const eventData = {
+        ab_test: testName,
+        ab_variant: variant
       };
-    }
-    
-    if (typeof gtag !== 'undefined') {
-      const eventName = config.eventName || 'abVariantInit';
-      
-      // Enhanced event tracking with error handling
-      try {
-        gtag('event', eventName, enrichedData);
-        
-        if (DEBUG) {
-          console.group('A/B Event Tracked');
-          console.log('Event Name:', eventName);
-          console.log('Event Data:', enrichedData);
-          console.log('Current GA4 Config:', window.gtag?.config);
-          console.groupEnd();
-        }
-        
-        // Custom event for diagnostics
-        if (typeof window.CustomEvent === 'function') {
-          document.dispatchEvent(new CustomEvent('abVariantTracked', { detail: enrichedData }));
-        }
-        
-      } catch (error) {
-        console.error('GA4 Event tracking failed:', error);
-      }
-    } else {
-      log('gtag not available', { enrichedData, gtagAvailable: typeof gtag });
-      
-      // Queue event for when gtag becomes available
-      if (!window._abEventsQueue) {
-        window._abEventsQueue = [];
-        
-        // More aggressive polling for gtag availability
-        const pollForGTAG = setInterval(() => {
-          if (typeof gtag !== 'undefined') {
-            clearInterval(pollForGTAG);
-            log(`gtag became available, sending ${window._abEventsQueue.length} queued events`);
-            window._abEventsQueue.forEach(queuedEvent => {
-              const eventName = config.eventName || 'abVariantInit';
-              try {
-                gtag('event', eventName, queuedEvent);
-                log('Successfully sent queued event to gtag', queuedEvent);
-              } catch (error) {
-                log('Error sending queued event to gtag', error);
-              }
-            });
-            window._abEventsQueue = []; // Clear queue
-          }
-        }, 100); // Check more frequently
-        
-        // Also try to wait for gtag via window load
-        window.addEventListener('load', () => {
-          setTimeout(() => {
-            if (typeof gtag !== 'undefined' && window._abEventsQueue.length > 0) {
-              clearInterval(pollForGTAG);
-              log(`gtag available after page load, sending ${window._abEventsQueue.length} queued events`);
-              window._abEventsQueue.forEach(queuedEvent => {
-                const eventName = config.eventName || 'abVariantInit';
-                try {
-                  gtag('event', eventName, queuedEvent);
-                  log('Successfully sent delayed event to gtag', queuedEvent);
-                } catch (error) {
-                  log('Error sending delayed event to gtag', error);
-                }
-              });
-              window._abEventsQueue = []; // Clear queue
-            }
-          }, 1000);
+
+      // Ensure dataLayer exists
+      window.dataLayer = window.dataLayer || [];
+
+      // Send via gtag if available, otherwise use dataLayer
+      if (typeof gtag !== 'undefined') {
+        gtag('event', eventName, eventData);
+        log('Event sent via gtag', { testName, variant });
+      } else {
+        window.dataLayer.push({
+          event: eventName,
+          ...eventData
         });
+        log('Event sent via dataLayer', { testName, variant });
       }
-      window._abEventsQueue.push(enrichedData);
-      log('Event queued for gtag', { queueLength: window._abEventsQueue.length, enrichedData });
+    } catch (error) {
+      console.error('[GA4 A/B] Tracking failed:', error.message);
     }
   }
-  
-  // Track which tests have been sent to GA4 to prevent duplicates
-  const sentToGA4 = new Set();
-  
+
   /**
-   * Process A/B test events that may have been added to dataLayer
+   * Initialize A/B test tracking
    */
-  function processExistingEvents() {
-    if (!window.dataLayer) return;
-    
-    // Process any existing A/B events in dataLayer
-    window.dataLayer.forEach(item => {
-      if (item && item.event === 'abVariantInit' && item.ab_test && item.ab_variant) {
-        const testKey = `${item.ab_test}`;
-        
-        // Prevent duplicate GA4 events for the same test in the same session
-        if (sentToGA4.has(testKey)) {
-          log(`Skipping duplicate GA4 event for test: ${item.ab_test}`, { 
-            previouslySent: true, 
-            currentVariant: item.ab_variant 
-          });
-          return;
-        }
-        
-        // Mark this test as sent and track the event
-        sentToGA4.add(testKey);
-        
-        trackEvent({
-          ab_test: item.ab_test,
-          ab_variant: item.ab_variant
-        });
-        
-        log(`Sent existing event to GA4: ${item.ab_test} = ${item.ab_variant}`, { 
-          isFirstEvent: true 
-        });
+  function initTracking() {
+    const currentPath = window.location.pathname;
+    log('Initializing tracking', { path: currentPath, testsCount: tests.length });
+
+    tests.forEach(test => {
+      // Skip if no cookie name defined
+      if (!test.cookieName) {
+        log('Test missing cookieName - skipping', { test: test.test });
+        return;
       }
+
+      // Check if test is active on current path
+      const paths = Array.isArray(test.paths) ? test.paths : [];
+      const isActive = paths.some(path =>
+          currentPath === path || currentPath.startsWith(path + '/')
+      );
+
+      if (!isActive) {
+        log('Test inactive on path', { test: test.test, path: currentPath });
+        return;
+      }
+
+      // Get variant from meta tag (set by Cloudflare Worker)
+      let variant = getVariant(test.cookieName);
+
+      log('Tracking test', { test: test.test, variant });
+      trackEvent(test.test, variant);
     });
   }
 
   /**
-   * Listen for abVariantInit events in dataLayer and ensure they reach GA4
+   * Public API for manual tracking
    */
-  function initGA4Listener() {
-    const setupVerification = verifyGA4Setup();
-    if (!setupVerification.ga4Enabled) {
-      log('GA4 integration disabled, skipping listener setup');
-      return;
-    }
-    
-    // Ensure dataLayer exists
-    window.dataLayer = window.dataLayer || [];
-    
-    // First, process any existing events that were pushed before this script loaded
-    processExistingEvents();
-    
-    // Store original push method
-    const originalPush = window.dataLayer.push;
-    
-    // Enhanced override with comprehensive logging and deduplication
-    window.dataLayer.push = function(...args) {
-      const result = originalPush.apply(this, args);
-      
-      args.forEach(item => {
-        if (item && item.event === 'abVariantInit' && item.ab_test && item.ab_variant) {
-          const testKey = `${item.ab_test}`;
-          
-          // Prevent duplicate GA4 events for the same test in the same session
-          if (sentToGA4.has(testKey)) {
-            log(`Skipping duplicate GA4 event for test: ${item.ab_test}`, { 
-              previouslySent: true, 
-              currentVariant: item.ab_variant 
-            });
-            return;
-          }
-          
-          // Mark this test as sent and track the event
-          sentToGA4.add(testKey);
-          
-          trackEvent({
-            ab_test: item.ab_test,
-            ab_variant: item.ab_variant
-          });
-          
-          log(`Sent new event to GA4: ${item.ab_test} = ${item.ab_variant}`, { 
-            isFirstEvent: true 
-          });
-        }
-      });
-      
-      return result;
+  function exposeAPI() {
+    window.cloudflareAbTesting.ga4.track = function(testName, variant) {
+      if (typeof testName === 'string' && testName.trim().length > 0 && isValidVariant(variant)) {
+        trackEvent(testName, variant);
+      } else {
+        log('Invalid arguments to track():', { testName, variant });
+      }
     };
-    
-    log('GA4 listener initialized with deduplication and existing event processing');
+
+    window.cloudflareAbTesting.ga4.isEnabled = function() {
+      return config.enabled === true;
+    };
   }
-  
+
   // Initialize when DOM is ready
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initGA4Listener);
+    console.log(gtag);
+    document.addEventListener('DOMContentLoaded', initTracking);
   } else {
-    initGA4Listener();
+    // DOM already loaded - call directly
+    initTracking();
   }
 
-  // Generate session ID for diagnostics
-  const sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-  if (window.cloudflareAbTesting) {
-    window.cloudflareAbTesting.sessionId = sessionId;
-  }
+  // Expose public API
+  exposeAPI();
 
-  log('GA4 A/B tracker initialized with session: ' + sessionId);
-  
-  // Expose diagnostic functions for troubleshooting
-  if (DEBUG) {
-    window.ABGA4Diagnostics = {
-      verifySetup: verifyGA4Setup,
-      getConfig: () => config,
-      trackTest: (test, variant) => trackEvent({ab_test: test, ab_variant: variant})
-    };
-  }
+  log('GA4 A/B tracker initialized');
 
 })();

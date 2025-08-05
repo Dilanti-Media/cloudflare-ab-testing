@@ -3,7 +3,7 @@
  * Plugin Name:       Cloudflare A/B Testing
  * Plugin URI:        https://dilantimedia.com/
  * Description:       Provides A/B testing capabilities integrated with Cloudflare Workers.
- * Version:           2.1.2
+ * Version:           2.1.3
  * Author:            Dilanti Media
  * Author URI:        https://dilantimedia.com/
  * License:           GPL-2.0+
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit; // Exit if accessed directly
 }
 
-define( 'CLOUDFLARE_AB_TESTING_VERSION', '2.1.2' );
+define( 'CLOUDFLARE_AB_TESTING_VERSION', '2.1.3' );
 define( 'CLOUDFLARE_AB_TESTING_URL', plugin_dir_url( __FILE__ ) );
 
 // Include the new files
@@ -43,7 +43,7 @@ function cloudflare_ab_init_updater() {
             plugin_basename( __FILE__ ),
             $github_username,
             $github_repo,
-            CLOUDFLARE_AB_TESTING_VERSION . '.' . time(),
+            CLOUDFLARE_AB_TESTING_VERSION,
             isset( $github_settings['github_token'] ) ? $github_settings['github_token'] : ''
         );
     }
