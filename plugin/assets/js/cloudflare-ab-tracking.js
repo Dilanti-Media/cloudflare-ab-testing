@@ -7,14 +7,10 @@
 (function() {
   'use strict';
 
-  console.log(gtag);
-
   // Exit early if not configured
   if (!window.cloudflareAbTesting?.ga4) {
     return;
   }
-
-  console.log(gtag);
 
   const config = window.cloudflareAbTesting.ga4;
   const tests = window.cloudflareAbTesting.registry || [];
@@ -135,7 +131,6 @@
 
   // Initialize when DOM is ready
   if (document.readyState === 'loading') {
-    console.log(gtag);
     document.addEventListener('DOMContentLoaded', initTracking);
   } else {
     // DOM already loaded - call directly
