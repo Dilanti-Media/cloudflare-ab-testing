@@ -88,19 +88,46 @@
       if (!window._abEventsQueue) {
         window._abEventsQueue = [];
         
-        // Poll for gtag availability
+        // More aggressive polling for gtag availability
         const pollForGTAG = setInterval(() => {
           if (typeof gtag !== 'undefined') {
             clearInterval(pollForGTAG);
+            log(`gtag became available, sending ${window._abEventsQueue.length} queued events`);
             window._abEventsQueue.forEach(queuedEvent => {
               const eventName = config.eventName || 'abVariantInit';
-              gtag('event', eventName, queuedEvent);
+              try {
+                gtag('event', eventName, queuedEvent);
+                log('Successfully sent queued event to gtag', queuedEvent);
+              } catch (error) {
+                log('Error sending queued event to gtag', error);
+              }
             });
-            delete window._abEventQueue;
+            window._abEventsQueue = []; // Clear queue
           }
-        }, 500);
+        }, 100); // Check more frequently
+        
+        // Also try to wait for gtag via window load
+        window.addEventListener('load', () => {
+          setTimeout(() => {
+            if (typeof gtag !== 'undefined' && window._abEventsQueue.length > 0) {
+              clearInterval(pollForGTAG);
+              log(`gtag available after page load, sending ${window._abEventsQueue.length} queued events`);
+              window._abEventsQueue.forEach(queuedEvent => {
+                const eventName = config.eventName || 'abVariantInit';
+                try {
+                  gtag('event', eventName, queuedEvent);
+                  log('Successfully sent delayed event to gtag', queuedEvent);
+                } catch (error) {
+                  log('Error sending delayed event to gtag', error);
+                }
+              });
+              window._abEventsQueue = []; // Clear queue
+            }
+          }, 1000);
+        });
       }
       window._abEventsQueue.push(enrichedData);
+      log('Event queued for gtag', { queueLength: window._abEventsQueue.length, enrichedData });
     }
   }
   
