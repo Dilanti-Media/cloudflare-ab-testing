@@ -108,6 +108,41 @@
   const sentToGA4 = new Set();
   
   /**
+   * Process A/B test events that may have been added to dataLayer
+   */
+  function processExistingEvents() {
+    if (!window.dataLayer) return;
+    
+    // Process any existing A/B events in dataLayer
+    window.dataLayer.forEach(item => {
+      if (item && item.event === 'abVariantInit' && item.ab_test && item.ab_variant) {
+        const testKey = `${item.ab_test}`;
+        
+        // Prevent duplicate GA4 events for the same test in the same session
+        if (sentToGA4.has(testKey)) {
+          log(`Skipping duplicate GA4 event for test: ${item.ab_test}`, { 
+            previouslySent: true, 
+            currentVariant: item.ab_variant 
+          });
+          return;
+        }
+        
+        // Mark this test as sent and track the event
+        sentToGA4.add(testKey);
+        
+        trackEvent({
+          ab_test: item.ab_test,
+          ab_variant: item.ab_variant
+        });
+        
+        log(`Sent existing event to GA4: ${item.ab_test} = ${item.ab_variant}`, { 
+          isFirstEvent: true 
+        });
+      }
+    });
+  }
+
+  /**
    * Listen for abVariantInit events in dataLayer and ensure they reach GA4
    */
   function initGA4Listener() {
@@ -119,6 +154,9 @@
     
     // Ensure dataLayer exists
     window.dataLayer = window.dataLayer || [];
+    
+    // First, process any existing events that were pushed before this script loaded
+    processExistingEvents();
     
     // Store original push method
     const originalPush = window.dataLayer.push;
@@ -148,7 +186,7 @@
             ab_variant: item.ab_variant
           });
           
-          log(`Sent to GA4: ${item.ab_test} = ${item.ab_variant}`, { 
+          log(`Sent new event to GA4: ${item.ab_test} = ${item.ab_variant}`, { 
             isFirstEvent: true 
           });
         }
@@ -157,7 +195,7 @@
       return result;
     };
     
-    log('GA4 listener initialized with deduplication');
+    log('GA4 listener initialized with deduplication and existing event processing');
   }
   
   // Initialize when DOM is ready

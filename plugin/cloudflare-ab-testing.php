@@ -3,7 +3,7 @@
  * Plugin Name:       Cloudflare A/B Testing
  * Plugin URI:        https://dilantimedia.com/
  * Description:       Provides A/B testing capabilities integrated with Cloudflare Workers.
- * Version:           2.1.0
+ * Version:           2.1.1
  * Author:            Dilanti Media
  * Author URI:        https://dilantimedia.com/
  * License:           GPL-2.0+
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit; // Exit if accessed directly
 }
 
-define( 'CLOUDFLARE_AB_TESTING_VERSION', '2.1.0' );
+define( 'CLOUDFLARE_AB_TESTING_VERSION', '2.1.1' );
 define( 'CLOUDFLARE_AB_TESTING_URL', plugin_dir_url( __FILE__ ) );
 
 // Include the new files
@@ -43,7 +43,7 @@ function cloudflare_ab_init_updater() {
             plugin_basename( __FILE__ ),
             $github_username,
             $github_repo,
-            CLOUDFLARE_AB_TESTING_VERSION,
+            CLOUDFLARE_AB_TESTING_VERSION . '.' . time(),
             isset( $github_settings['github_token'] ) ? $github_settings['github_token'] : ''
         );
     }
@@ -95,7 +95,7 @@ function cloudflare_ab_enqueue_assets() {
         'cloudflare-ab-testing-script',
         CLOUDFLARE_AB_TESTING_URL . 'assets/js/cloudflare-ab-testing.js',
         [],
-        CLOUDFLARE_AB_TESTING_VERSION,
+        CLOUDFLARE_AB_TESTING_VERSION . '.' . time(),
         true
     );
 
@@ -149,7 +149,7 @@ function cloudflare_ab_enqueue_assets() {
             'cloudflare-ab-tracking',
             CLOUDFLARE_AB_TESTING_URL . 'assets/js/cloudflare-ab-tracking.js',
             [],
-            CLOUDFLARE_AB_TESTING_VERSION,
+            CLOUDFLARE_AB_TESTING_VERSION . '.' . time(),
             true
         );
     }
@@ -180,7 +180,7 @@ function cloudflare_ab_enqueue_admin_assets( $hook ) {
         'cloudflare-ab-admin-scripts',
         CLOUDFLARE_AB_TESTING_URL . 'assets/js/admin-scripts.js',
         [ 'jquery' ],
-        CLOUDFLARE_AB_TESTING_VERSION,
+        CLOUDFLARE_AB_TESTING_VERSION . '.' . time(),
         true
     );
     
