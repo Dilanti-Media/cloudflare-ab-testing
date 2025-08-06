@@ -165,6 +165,20 @@ function cloudflare_ab_diagnostics_page_markup() {
 
         echo '</div></div>';
 
+        // System Health Check
+        echo '<div class="postbox" style="margin-top: 20px;">';
+        echo '<h2 class="hndle" style="padding: 10px 15px; margin: 0; border-bottom: 1px solid #ddd;">System Health Check</h2>';
+        echo '<div class="inside" style="padding: 15px;">';
+        
+        // Real-time health monitoring
+        echo '<div id="health-check-container">';
+        echo '<p>Running comprehensive system health checks...</p>';
+        echo '<button id="run-health-check" class="button button-primary">Run Health Check</button>';
+        echo '<div id="health-results" style="margin-top: 15px; display: none;"></div>';
+        echo '</div>';
+        
+        echo '</div></div>';
+
         // Test Registry
         if ( ! empty( trim( $enabled_urls ) ) ) {
             echo '<div class="postbox" style="margin-top: 20px;">';
@@ -297,6 +311,17 @@ function cloudflare_ab_diagnostics_page_markup() {
         echo '<li><a href="' . esc_url( add_query_arg( $cookie_name ?: 'AB_TEST', 'B', home_url( $current_path ) ) ) . '" target="_blank">Test Variant B</a></li>';
         echo '</ul>';
 
+        echo '</div></div>';
+
+        // Live Environment Test
+        echo '<div class="postbox" style="margin-top: 20px;">';
+        echo '<h2 class="hndle" style="padding: 10px 15px; margin: 0; border-bottom: 1px solid #ddd;">Live Environment Test</h2>';
+        echo '<div class="inside" style="padding: 15px;">';
+        
+        echo '<p>Test your current environment to verify A/B testing is working correctly:</p>';
+        echo '<button id="test-live-environment" class="button button-secondary">Test Live Environment</button>';
+        echo '<div id="live-test-results" style="margin-top: 15px; display: none;"></div>';
+        
         echo '</div></div>';
 
         // Troubleshooting
@@ -537,6 +562,137 @@ function cloudflare_ab_diagnostics_page_markup() {
                     $('#create-namespace').click();
                 }
             });
+            
+            // Run comprehensive health check
+            $('#run-health-check').click(function() {
+                const button = $(this);
+                const results = $('#health-results');
+                
+                button.prop('disabled', true).text('Running...');
+                results.html('<p>🔍 Running comprehensive health checks...</p>').show();
+                
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'cloudflare_ab_health_check',
+                        nonce: nonce
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            const checks = response.data;
+                            let html = '<div class="health-check-results">';
+                            
+                            // Overall status
+                            const overallStatus = checks.overall_status;
+                            const statusIcon = overallStatus === 'healthy' ? '✅' : overallStatus === 'warning' ? '⚠️' : '❌';
+                            const statusColor = overallStatus === 'healthy' ? 'green' : overallStatus === 'warning' ? 'orange' : 'red';
+                            
+                            html += `<h3 style="color: ${statusColor};">${statusIcon} Overall Status: ${overallStatus.toUpperCase()}</h3>`;
+                            
+                            // Individual checks
+                            checks.checks.forEach(function(check) {
+                                const checkIcon = check.status === 'pass' ? '✅' : check.status === 'warning' ? '⚠️' : '❌';
+                                const checkColor = check.status === 'pass' ? 'green' : check.status === 'warning' ? 'orange' : 'red';
+                                
+                                html += `<div style="margin: 10px 0; padding: 10px; border-left: 4px solid ${checkColor}; background: #f9f9f9;">`;
+                                html += `<h4 style="margin: 0 0 5px 0; color: ${checkColor};">${checkIcon} ${check.name}</h4>`;
+                                html += `<p style="margin: 0;">${check.message}</p>`;
+                                
+                                if (check.details && check.details.length > 0) {
+                                    html += '<ul style="margin: 5px 0 0 20px;">';
+                                    check.details.forEach(function(detail) {
+                                        html += `<li>${detail}</li>`;
+                                    });
+                                    html += '</ul>';
+                                }
+                                
+                                if (check.recommendation) {
+                                    html += `<p style="margin: 5px 0 0 0; font-style: italic; color: #666;"><strong>Recommendation:</strong> ${check.recommendation}</p>`;
+                                }
+                                
+                                html += '</div>';
+                            });
+                            
+                            html += '</div>';
+                            results.html(html);
+                        } else {
+                            results.html(`<p style="color: red;">❌ Health check failed: ${response.data}</p>`);
+                        }
+                    },
+                    error: function() {
+                        results.html('<p style="color: red;">❌ Network error during health check.</p>');
+                    },
+                    complete: function() {
+                        button.prop('disabled', false).text('Run Health Check');
+                    }
+                });
+            });
+            
+            // Test live environment
+            $('#test-live-environment').click(function() {
+                const button = $(this);
+                const results = $('#live-test-results');
+                
+                button.prop('disabled', true).text('Testing...');
+                results.html('<p>🧪 Testing live environment...</p>').show();
+                
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'cloudflare_ab_test_live_environment',
+                        nonce: nonce
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            const test = response.data;
+                            let html = '<div class="live-test-results">';
+                            
+                            html += `<h4>Environment Test Results</h4>`;
+                            html += `<p><strong>Test URL:</strong> <code>${test.test_url}</code></p>`;
+                            html += `<p><strong>Status Code:</strong> ${test.status_code}</p>`;
+                            
+                            if (test.worker_headers && Object.keys(test.worker_headers).length > 0) {
+                                html += '<p><strong>Worker Headers Found:</strong></p><ul>';
+                                Object.keys(test.worker_headers).forEach(function(key) {
+                                    html += `<li><code>${key}: ${test.worker_headers[key]}</code></li>`;
+                                });
+                                html += '</ul>';
+                            } else {
+                                html += '<p style="color: orange;">⚠️ No worker headers detected</p>';
+                            }
+                            
+                            if (test.meta_tags_found) {
+                                html += `<p style="color: green;">✅ Meta tags injection working</p>`;
+                                html += `<p><strong>Detected Variant:</strong> <code>${test.detected_variant || 'None'}</code></p>`;
+                                html += `<p><strong>Detected Test:</strong> <code>${test.detected_test || 'None'}</code></p>`;
+                            } else {
+                                html += '<p style="color: red;">❌ Meta tags not found - A/B testing may not be working</p>';
+                            }
+                            
+                            if (test.recommendations && test.recommendations.length > 0) {
+                                html += '<h4>Recommendations:</h4><ul>';
+                                test.recommendations.forEach(function(rec) {
+                                    html += `<li>${rec}</li>`;
+                                });
+                                html += '</ul>';
+                            }
+                            
+                            html += '</div>';
+                            results.html(html);
+                        } else {
+                            results.html(`<p style="color: red;">❌ Live test failed: ${response.data}</p>`);
+                        }
+                    },
+                    error: function() {
+                        results.html('<p style="color: red;">❌ Network error during live test.</p>');
+                    },
+                    complete: function() {
+                        button.prop('disabled', false).text('Test Live Environment');
+                    }
+                });
+            });
         });
         </script>
 
@@ -563,6 +719,19 @@ function cloudflare_ab_diagnostics_page_markup() {
             font-size: 12px;
             padding: 4px 8px;
             height: auto;
+        }
+        
+        .health-check-results h3 {
+            margin-top: 0;
+        }
+        
+        .health-check-results h4 {
+            margin-bottom: 5px;
+        }
+        
+        .live-test-results h4 {
+            margin-top: 0;
+            margin-bottom: 10px;
         }
         </style>
     </div>

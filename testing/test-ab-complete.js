@@ -225,6 +225,10 @@ function makeProxyRequest(proxyHost, proxyPort) {
                 });
                 
                 res.on('end', () => {
+                    // Extract meta tag variants (primary check)
+                    const metaVariant = extractMetaVariant(body);
+                    const metaTest = extractMetaTest(body);
+                    
                     // Extract content variant from actual displayed content
                     const contentVariant = extractContentVariant(body);
                     
@@ -237,13 +241,16 @@ function makeProxyRequest(proxyHost, proxyPort) {
                         proxy: `${proxyHost}:${proxyPort}`,
                         headerVariant,
                         cookieVariant,
+                        metaVariant,
+                        metaTest,
                         contentVariant,
                         debugInfo,
                         statusCode: res.statusCode,
                         cfRay: res.headers['cf-ray'],
                         contentLength: body.length,
                         workerActive: res.headers['x-worker-active'] === 'true',
-                        hasCorrectButton: body.includes('btn-ab')
+                        hasCorrectButton: body.includes('btn-ab'),
+                        hasMetaTags: metaVariant !== 'Unknown'
                     });
                 });
             });
@@ -289,6 +296,18 @@ function makeProxyRequest(proxyHost, proxyPort) {
     });
 }
 
+function extractMetaVariant(html) {
+    // Extract variant from server-side injected meta tag
+    const metaMatch = html.match(/<meta name="cf-ab-variant" content="([AB])"/);
+    return metaMatch ? metaMatch[1] : 'Unknown';
+}
+
+function extractMetaTest(html) {
+    // Extract test name from server-side injected meta tag
+    const metaMatch = html.match(/<meta name="cf-ab-test" content="([^"]+)"/);
+    return metaMatch ? metaMatch[1] : 'Unknown';
+}
+
 function extractContentVariant(html) {
     // Look for actual rendered A/B button content
     const hasButtonA = html.includes('btn-ab btn-a') && html.includes('Click Here &#8211; A');
@@ -317,9 +336,12 @@ async function testLiveSystem() {
     const results = [];
     let successCount = 0;
     let headerCounts = { A: 0, B: 0, Unknown: 0 };
+    let metaCounts = { A: 0, B: 0, Unknown: 0 };
     let contentCounts = { A: 0, B: 0, None: 0, Both: 0 };
     let syncedCount = 0;
+    let metaSyncedCount = 0;
     let workerActiveCount = 0;
+    let metaTagCount = 0;
     
     for (let i = 0; i < PROXIES.length; i++) {
         const [host, port] = PROXIES[i].split(':');
@@ -330,19 +352,30 @@ async function testLiveSystem() {
         if (result.success && result.statusCode === 200) {
             successCount++;
             headerCounts[result.headerVariant]++;
+            metaCounts[result.metaVariant]++;
             contentCounts[result.contentVariant]++;
             
             if (result.headerVariant === result.contentVariant && result.headerVariant !== 'Unknown') {
                 syncedCount++;
             }
             
+            if (result.metaVariant === result.contentVariant && result.metaVariant !== 'Unknown') {
+                metaSyncedCount++;
+            }
+            
             if (result.workerActive) {
                 workerActiveCount++;
             }
             
+            if (result.hasMetaTags) {
+                metaTagCount++;
+            }
+            
             const sync = result.headerVariant === result.contentVariant ? '✅' : '❌';
+            const metaSync = result.metaVariant === result.contentVariant ? '✅' : '❌';
             const worker = result.workerActive ? '✅' : '❌';
-            console.log(`${result.headerVariant}→${result.contentVariant} | ${sync} | ${worker} | ${(result.contentLength/1000).toFixed(1)}kb`);
+            const meta = result.hasMetaTags ? '✅' : '❌';
+            console.log(`H:${result.headerVariant}→M:${result.metaVariant}→C:${result.contentVariant} | ${metaSync} | ${meta} | ${worker} | ${(result.contentLength/1000).toFixed(1)}kb`);
         } else {
             const error = result.error || 'Unknown error';
             console.log(`❌ ${error}`);
@@ -363,12 +396,17 @@ async function testLiveSystem() {
         successCount,
         totalTests: PROXIES.length,
         headerCounts,
+        metaCounts,
         contentCounts,
         syncedCount,
+        metaSyncedCount,
         workerActiveCount,
+        metaTagCount,
         workingProxyRate: successCount / PROXIES.length,
         syncRate: successCount > 0 ? syncedCount / successCount : 0,
-        workerActiveRate: successCount > 0 ? workerActiveCount / successCount : 0
+        metaSyncRate: successCount > 0 ? metaSyncedCount / successCount : 0,
+        workerActiveRate: successCount > 0 ? workerActiveCount / successCount : 0,
+        metaTagRate: successCount > 0 ? metaTagCount / successCount : 0
     };
 }
 
@@ -389,17 +427,26 @@ function generateReport(algorithmResults, liveResults) {
     // Live System Results
     if (liveResults) {
         const headerTotal = liveResults.headerCounts.A + liveResults.headerCounts.B;
+        const metaTotal = liveResults.metaCounts.A + liveResults.metaCounts.B;
         const contentTotal = liveResults.contentCounts.A + liveResults.contentCounts.B;
         
         console.log('🌐 Live System Performance:');
         console.log(`   Working Proxies: ${liveResults.successCount}/${liveResults.totalTests} (${(liveResults.workingProxyRate * 100).toFixed(1)}%)`);
         console.log(`   Worker Active: ${liveResults.workerActiveCount}/${liveResults.successCount} (${(liveResults.workerActiveRate * 100).toFixed(1)}%)`);
+        console.log(`   Meta Tags Present: ${liveResults.metaTagCount}/${liveResults.successCount} (${(liveResults.metaTagRate * 100).toFixed(1)}%)`);
         console.log(`   Header→Content Sync: ${liveResults.syncedCount}/${liveResults.successCount} (${(liveResults.syncRate * 100).toFixed(1)}%)`);
+        console.log(`   Meta→Content Sync: ${liveResults.metaSyncedCount}/${liveResults.successCount} (${(liveResults.metaSyncRate * 100).toFixed(1)}%)`);
         
         if (headerTotal > 0) {
             const headerPercentA = (liveResults.headerCounts.A / headerTotal * 100).toFixed(1);
             const headerPercentB = (liveResults.headerCounts.B / headerTotal * 100).toFixed(1);
             console.log(`   Header Distribution: ${headerPercentA}% A | ${headerPercentB}% B`);
+        }
+        
+        if (metaTotal > 0) {
+            const metaPercentA = (liveResults.metaCounts.A / metaTotal * 100).toFixed(1);
+            const metaPercentB = (liveResults.metaCounts.B / metaTotal * 100).toFixed(1);
+            console.log(`   Meta Tag Distribution: ${metaPercentA}% A | ${metaPercentB}% B`);
         }
         
         if (contentTotal > 0) {
@@ -419,13 +466,17 @@ function generateReport(algorithmResults, liveResults) {
     if (liveResults) {
         const proxyHealth = liveResults.workingProxyRate >= CONFIG.MIN_WORKING_PROXIES;
         const syncHealth = liveResults.syncRate >= CONFIG.MIN_SYNC_RATE;
+        const metaSyncHealth = liveResults.metaSyncRate >= CONFIG.MIN_SYNC_RATE;
+        const metaTagHealth = liveResults.metaTagRate >= 0.8; // 80% of responses should have meta tags
         const workerHealth = liveResults.workerActiveRate >= 0.9;
         
         console.log(`   Proxy Connectivity: ${proxyHealth ? '✅ GOOD' : '⚠️ LIMITED'}`);
         console.log(`   Header Sync: ${syncHealth ? '✅ EXCELLENT' : '❌ POOR'}`);
+        console.log(`   Meta Tag Presence: ${metaTagHealth ? '✅ EXCELLENT' : '❌ POOR'}`);
+        console.log(`   Meta Tag Sync: ${metaSyncHealth ? '✅ EXCELLENT' : '❌ POOR'}`);
         console.log(`   Worker Status: ${workerHealth ? '✅ ACTIVE' : '❌ ISSUES'}`);
         
-        const overallHealth = algorithmHealth && proxyHealth && syncHealth && workerHealth;
+        const overallHealth = algorithmHealth && proxyHealth && syncHealth && metaSyncHealth && metaTagHealth && workerHealth;
         
         console.log('');
         console.log(`🏆 Overall Status: ${overallHealth ? '✅ SYSTEM HEALTHY' : '⚠️ ISSUES DETECTED'}`);
@@ -436,6 +487,8 @@ function generateReport(algorithmResults, liveResults) {
             if (!algorithmHealth) console.log('   • Review hash algorithm for better distribution');
             if (!proxyHealth) console.log('   • Check proxy connectivity and credentials');
             if (!syncHealth) console.log('   • Verify Cloudflare Worker header configuration');
+            if (!metaTagHealth) console.log('   • Check WordPress meta tag injection (wp_head hook)');
+            if (!metaSyncHealth) console.log('   • Verify meta tag sync with content variants');
             if (!workerHealth) console.log('   • Check Cloudflare Worker deployment status');
         }
     } else {
@@ -469,6 +522,8 @@ async function runCompleteTest() {
         // Exit with appropriate code
         const hasIssues = !algorithmResults.isBalanced || 
                          (liveResults && (liveResults.syncRate < CONFIG.MIN_SYNC_RATE || 
+                                         liveResults.metaSyncRate < CONFIG.MIN_SYNC_RATE ||
+                                         liveResults.metaTagRate < 0.8 ||
                                          liveResults.workingProxyRate < CONFIG.MIN_WORKING_PROXIES));
         
         process.exit(hasIssues ? 1 : 0);

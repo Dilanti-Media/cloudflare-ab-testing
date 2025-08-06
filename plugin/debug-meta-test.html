@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Meta Tag A/B Test Verification</title>
+    <meta name="cf-ab-variant" content="B">
+    <meta name="cf-ab-test" content="homepage_test">
+</head>
+<body>
+    <h1>Meta Tag A/B Test Verification</h1>
+    <p>This page simulates the meta tags that would be injected by WordPress.</p>
+    
+    <div id="results"></div>
+    
+    <script>
+    // Test meta tag reading (same logic as plugin)
+    function getVariant(cookieName) {
+        // Primary: Check Cloudflare Worker meta tag (server-assigned)
+        const workerVariant = document.querySelector('meta[name="cf-ab-variant"]')?.content?.trim();
+        if (workerVariant === 'A' || workerVariant === 'B') {
+            console.log(`[Variant] Worker assigned: ${workerVariant} for ${cookieName}`);
+            return workerVariant;
+        }
+
+        // URL parameter (for manual testing/debugging)
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlVariant = urlParams.get(cookieName);
+        if (urlVariant === 'A' || urlVariant === 'B') {
+            return urlVariant;
+        }
+
+        return 'A'; // Safe fallback
+    }
+    
+    // Test the variant detection
+    const variant = getVariant('AB_HOMEPAGE_TEST');
+    const testName = document.querySelector('meta[name="cf-ab-test"]')?.content?.trim();
+    
+    document.getElementById('results').innerHTML = `
+        <h2>Test Results:</h2>
+        <ul>
+            <li><strong>Detected Variant:</strong> ${variant}</li>
+            <li><strong>Test Name:</strong> ${testName || 'Not found'}</li>
+            <li><strong>Meta Tag Variant:</strong> ${document.querySelector('meta[name="cf-ab-variant"]')?.content || 'Not found'}</li>
+            <li><strong>Meta Tag Test:</strong> ${document.querySelector('meta[name="cf-ab-test"]')?.content || 'Not found'}</li>
+        </ul>
+        <h3>Expected Results:</h3>
+        <ul>
+            <li>Detected Variant: B</li>
+            <li>Test Name: homepage_test</li>
+            <li>Meta Tag Variant: B</li>
+            <li>Meta Tag Test: homepage_test</li>
+        </ul>
+        <div style="padding: 10px; margin: 10px 0; border: 2px solid ${variant === 'B' && testName === 'homepage_test' ? 'green' : 'red'}; background: ${variant === 'B' && testName === 'homepage_test' ? '#e8f5e8' : '#ffe8e8'};">
+            <strong>Status:</strong> ${variant === 'B' && testName === 'homepage_test' ? '✅ PASS - Meta tags working correctly!' : '❌ FAIL - Check meta tag implementation'}
+        </div>
+    `;
+    </script>
+</body>
+</html>

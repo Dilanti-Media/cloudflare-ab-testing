@@ -3,7 +3,7 @@
  * Plugin Name:       Cloudflare A/B Testing
  * Plugin URI:        https://dilantimedia.com/
  * Description:       Provides A/B testing capabilities integrated with Cloudflare Workers.
- * Version:           2.1.7
+ * Version:           2.1.8
  * Author:            Dilanti Media
  * Author URI:        https://dilantimedia.com/
  * License:           GPL-2.0+
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit; // Exit if accessed directly
 }
 
-define( 'CLOUDFLARE_AB_TESTING_VERSION', '2.1.7' );
+define( 'CLOUDFLARE_AB_TESTING_VERSION', '2.1.8' );
 define( 'CLOUDFLARE_AB_TESTING_URL', plugin_dir_url( __FILE__ ) );
 
 // Include the new files
@@ -73,8 +73,17 @@ function cloudflare_ab_get_cookie_for_current_path() {
     return null;
 }
 
-// Inject A/B meta tags early in head (before any shortcodes)
+// Inject A/B meta tags early in head (before any shortcodes) 
 add_action( 'wp_head', 'cloudflare_ab_inject_meta_tags', 1 );
+
+// Alternative meta tag injection using output buffering (more aggressive) - DISABLED DUE TO SITE BREAKING
+// add_action( 'init', 'cloudflare_ab_start_output_buffering' );
+
+function cloudflare_ab_start_output_buffering() {
+    if ( ! is_admin() ) {
+        ob_start( 'cloudflare_ab_inject_meta_tags_buffer' );
+    }
+}
 
 function cloudflare_ab_inject_meta_tags() {
     // Only inject on frontend, not admin
@@ -87,33 +96,65 @@ function cloudflare_ab_inject_meta_tags() {
     $ab_variant = '';
     
     // Check for worker headers in $_SERVER
-    if ( isset( $_SERVER['HTTP_X_AB_TEST'] ) ) {
-        $ab_test = sanitize_text_field( $_SERVER['HTTP_X_AB_TEST'] );
+    // Note: HTTP headers with hyphens become underscores in PHP $_SERVER
+    $possible_variant_headers = ['HTTP_X_AB_VARIANT'];
+    $possible_test_headers = ['HTTP_X_AB_TEST'];
+    
+    foreach ( $possible_test_headers as $header ) {
+        if ( isset( $_SERVER[$header] ) && ! empty( $_SERVER[$header] ) ) {
+            $ab_test = sanitize_text_field( $_SERVER[$header] );
+            break;
+        }
     }
     
-    if ( isset( $_SERVER['HTTP_X_AB_VARIANT'] ) ) {
-        $ab_variant = sanitize_text_field( $_SERVER['HTTP_X_AB_VARIANT'] );
+    foreach ( $possible_variant_headers as $header ) {
+        if ( isset( $_SERVER[$header] ) && ! empty( $_SERVER[$header] ) ) {
+            $ab_variant = sanitize_text_field( $_SERVER[$header] );
+            break;
+        }
     }
     
-    // If no headers, check if we can determine from current test config
-    if ( empty( $ab_test ) || empty( $ab_variant ) ) {
+    // If we have a variant but no test name, infer it from current path configuration
+    if ( ! empty( $ab_variant ) && empty( $ab_test ) ) {
         $cookie_name = cloudflare_ab_get_cookie_for_current_path();
         if ( $cookie_name ) {
             // Extract test name from cookie name (AB_HOMEPAGE_TEST -> homepage_test)
             $ab_test = strtolower( str_replace( [ 'AB_', '_' ], [ '', '_' ], $cookie_name ) );
             $ab_test = trim( $ab_test, '_' );
-            
-            // Default to variant A if no worker info available
-            $ab_variant = 'A';
         }
     }
     
-    // Inject meta tags if we have valid A/B test data
-    if ( ! empty( $ab_test ) && ! empty( $ab_variant ) && in_array( $ab_variant, [ 'A', 'B' ] ) ) {
+    // If no worker headers found, check for specific test headers
+    if ( empty( $ab_variant ) ) {
+        $cookie_name = cloudflare_ab_get_cookie_for_current_path();
+        if ( $cookie_name ) {
+            $header_name = 'HTTP_X_' . strtoupper( str_replace( 'AB_', '', $cookie_name ) );
+            if ( isset( $_SERVER[$header_name] ) ) {
+                $ab_variant = sanitize_text_field( $_SERVER[$header_name] );
+                $ab_test = strtolower( str_replace( [ 'AB_', '_' ], [ '', '_' ], $cookie_name ) );
+                $ab_test = trim( $ab_test, '_' );
+            }
+        }
+    }
+    
+    // Final check: if we have a valid variant, proceed
+    if ( empty( $ab_variant ) ) {
+        return;
+    }
+    
+    // Only inject if we have a valid variant from the worker
+    if ( in_array( $ab_variant, [ 'A', 'B' ] ) ) {
         echo '<meta name="cf-ab-variant" content="' . esc_attr( $ab_variant ) . '">' . "\n";
         echo '<meta name="cf-ab-test" content="' . esc_attr( $ab_test ) . '">' . "\n";
+        
+        // Debug comment (only visible in HTML source when WP_DEBUG is enabled)
+        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+            echo '<!-- CF-AB-DEBUG: variant=' . esc_attr( $ab_variant ) . ', test=' . esc_attr( $ab_test ) . ' -->' . "\n";
+        }
     }
 }
+
+// Removed buffer function as it was causing site to break
 
 // Enqueue scripts and styles
 add_action( 'wp_enqueue_scripts', 'cloudflare_ab_enqueue_assets' );
