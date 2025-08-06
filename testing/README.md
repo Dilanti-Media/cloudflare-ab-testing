@@ -4,6 +4,33 @@ This directory contains the comprehensive test suite for validating the Cloudfla
 
 ## 🧪 Available Tests
 
+### `test-ga4.js` - GA4 Detection and Analytics Testing 🆕
+
+**Advanced GA4 hit detection and analytics validation using Puppeteer.**
+
+This sophisticated test performs:
+
+1. **Real Browser Testing** - Uses headless Chrome for realistic GA4 hit detection
+2. **Comprehensive Hit Monitoring** - Detects both standard GA4 and custom/proxy implementations
+3. **Advanced Pattern Recognition** - Identifies GA4 measurement IDs, custom endpoints, and server-side proxies
+4. **Diagnostics and Debugging** - Provides detailed analysis when no hits are detected
+5. **Multi-Proxy Testing** - Tests across different IP addresses to verify consistent tracking
+6. **Enhanced Request Analysis** - Monitors all analytics-related network requests
+
+**Usage:**
+```bash
+# Requires puppeteer and proxy credentials
+npm install puppeteer
+node test-ga4.js
+
+# Environment variables:
+TARGET_URL=https://your-site-with-ab-tests.com  # Default: test site
+MAX_CONCURRENT=3                                # Concurrent proxy tests
+TIMEOUT=60000                                  # Request timeout in ms
+WAIT_TIME=10000                                # Time to wait for analytics to fire
+LOG_DETAILED_HITS=true                         # Show detailed hit information
+```
+
 ### `test-ab-complete.js` - Complete System Verification ⭐
 
 **The primary and recommended test for all A/B testing validation.**
@@ -47,11 +74,45 @@ This test validates:
 node test-cache-worker.js
 ```
 
+### `test-meta-local.php` - Local Meta Tag Injection Test
+
+**Quick local test for WordPress meta tag injection functionality.**
+
+This test validates:
+- Meta tag injection logic
+- Header processing from Cloudflare Worker
+- WordPress environment simulation
+- Debug output generation
+
+**Usage:**
+```bash
+# Run locally without WordPress
+php test-meta-local.php
+```
+
+### `test-server-side.sh` - Server-Side Verification Script
+
+**Bash script for direct server testing and quick diagnostics.**
+
+This script performs:
+- Direct HTTP requests to test site
+- Meta tag extraction and validation
+- Variant distribution analysis
+- Basic health checks
+- Server-side troubleshooting
+
+**Usage:**
+```bash
+# Run from any server with curl
+chmod +x test-server-side.sh
+./test-server-side.sh
+```
+
 ## 🎯 Test Results & Validation
 
-### ✅ **Production Validation Status**
+### ✅ **Production Validation Status** (Updated 2024)
 
-All tests confirm the system is production-ready:
+The testing suite has been cleaned up and optimized with comprehensive GA4 detection. All tests confirm the system is production-ready:
 
 #### **Algorithm Validation**
 - **Distribution**: 50.07% A, 49.93% B across 10,000 samples
@@ -86,6 +147,12 @@ cp .env.example .env
 ```bash
 # From project root
 cd testing/
+
+# Install dependencies for GA4 testing
+npm install puppeteer
+
+# Run GA4 analytics detection test
+node test-ga4.js
 
 # Run main test suite
 node test-ab-complete.js
@@ -189,11 +256,24 @@ node test-cache-worker.js
 Tests are structured for CI/CD integration:
 ```yaml
 # Example GitHub Actions integration
+- name: Install dependencies
+  run: |
+    cd testing/
+    npm install puppeteer
+    
 - name: Run A/B Testing Suite
   run: |
     cd testing/
     node test-ab-complete.js
     node test-cache-worker.js
+    
+- name: Run GA4 Analytics Test (if credentials available)
+  run: |
+    cd testing/
+    node test-ga4.js
+  env:
+    SQUID_PROXY_USERNAME: ${{ secrets.SQUID_PROXY_USERNAME }}
+    SQUID_PROXY_PASSWORD: ${{ secrets.SQUID_PROXY_PASSWORD }}
 ```
 
 ### WordPress Testing

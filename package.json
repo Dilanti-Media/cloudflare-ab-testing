@@ -35,5 +35,9 @@
     "testMatch": [
       "**/tests/**/*.test.js"
     ]
+  },
+  "dependencies": {
+    "dotenv": "^17.2.1",
+    "puppeteer": "^24.16.0"
   }
 }
