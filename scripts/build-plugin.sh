@@ -137,12 +137,12 @@ fi
 
 # Create zip file
 echo -e "${YELLOW}Creating zip file...${NC}"
-cd "$BUILD_DIR"
+cd "$BUILD_DIR/cloudflare-ab-testing"
 ZIP_NAME="cloudflare-ab-testing-v$VERSION.zip"
-zip -r "$ZIP_NAME" cloudflare-ab-testing/ -x "*.git*" "*.svn*" "node_modules/*"
+zip -r "../$ZIP_NAME" . -x "*.git*" "*.svn*" "node_modules/*"
 
 # Move to releases directory
-mv "$ZIP_NAME" "$RELEASES_DIR/"
+mv "../$ZIP_NAME" "$RELEASES_DIR/"
 
 # Create latest symlink for easy access
 cd "$RELEASES_DIR"

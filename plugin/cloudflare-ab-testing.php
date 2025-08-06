@@ -3,7 +3,7 @@
  * Plugin Name:       Cloudflare A/B Testing
  * Plugin URI:        https://dilantimedia.com/
  * Description:       Provides A/B testing capabilities integrated with Cloudflare Workers.
- * Version:           2.1.4
+ * Version:           2.1.5
  * Author:            Dilanti Media
  * Author URI:        https://dilantimedia.com/
  * License:           GPL-2.0+
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit; // Exit if accessed directly
 }
 
-define( 'CLOUDFLARE_AB_TESTING_VERSION', '2.1.4' );
+define( 'CLOUDFLARE_AB_TESTING_VERSION', '2.1.5' );
 define( 'CLOUDFLARE_AB_TESTING_URL', plugin_dir_url( __FILE__ ) );
 
 // Include the new files
@@ -71,6 +71,48 @@ function cloudflare_ab_get_cookie_for_current_path() {
         }
     }
     return null;
+}
+
+// Inject A/B meta tags early in head (before any shortcodes)
+add_action( 'wp_head', 'cloudflare_ab_inject_meta_tags', 1 );
+
+function cloudflare_ab_inject_meta_tags() {
+    // Only inject on frontend, not admin
+    if ( is_admin() ) {
+        return;
+    }
+    
+    // Get A/B test info from Cloudflare Worker headers
+    $ab_test = '';
+    $ab_variant = '';
+    
+    // Check for worker headers in $_SERVER
+    if ( isset( $_SERVER['HTTP_X_AB_TEST'] ) ) {
+        $ab_test = sanitize_text_field( $_SERVER['HTTP_X_AB_TEST'] );
+    }
+    
+    if ( isset( $_SERVER['HTTP_X_AB_VARIANT'] ) ) {
+        $ab_variant = sanitize_text_field( $_SERVER['HTTP_X_AB_VARIANT'] );
+    }
+    
+    // If no headers, check if we can determine from current test config
+    if ( empty( $ab_test ) || empty( $ab_variant ) ) {
+        $cookie_name = cloudflare_ab_get_cookie_for_current_path();
+        if ( $cookie_name ) {
+            // Extract test name from cookie name (AB_HOMEPAGE_TEST -> homepage_test)
+            $ab_test = strtolower( str_replace( [ 'AB_', '_' ], [ '', '_' ], $cookie_name ) );
+            $ab_test = trim( $ab_test, '_' );
+            
+            // Default to variant A if no worker info available
+            $ab_variant = 'A';
+        }
+    }
+    
+    // Inject meta tags if we have valid A/B test data
+    if ( ! empty( $ab_test ) && ! empty( $ab_variant ) && in_array( $ab_variant, [ 'A', 'B' ] ) ) {
+        echo '<meta name="cf-ab-variant" content="' . esc_attr( $ab_variant ) . '">' . "\n";
+        echo '<meta name="cf-ab-test" content="' . esc_attr( $ab_test ) . '">' . "\n";
+    }
 }
 
 // Enqueue scripts and styles

@@ -56,21 +56,6 @@ function logError(...args) {
   console.error(...args);
 }
 
-/**
- * HTML escape function to prevent XSS vulnerabilities
- * Escapes characters that could be used to inject malicious HTML
- */
-function escapeHtml(unsafe) {
-  if (!unsafe || typeof unsafe !== 'string') {
-    return '';
-  }
-  return unsafe
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
 
 // Basic config validation
 if (!CONFIG.TIMEOUT_MS) {
@@ -340,41 +325,13 @@ async function handleABTestWithTimeout(request, url, test, env) {
       signal: controller.signal
     });
     
-    // Get the response text to inject meta tag
-    let html = await response.text();
-    
-    // Inject meta tag with variant into HTML head for JavaScript to read
-    // HTML-escape values to prevent XSS vulnerabilities
-    // Force injection of meta tags for all HTML responses
-    // This bypasses any HTML structure checking to ensure meta tags always appear
-    const escapedVariant = escapeHtml(variant);
-    const escapedTestName = escapeHtml(test.test);
-    const metaTag = `<meta name="cf-ab-variant" content="${escapedVariant}">
-<meta name="cf-ab-test" content="${escapedTestName}">`;
-    
-    // Force injection into any HTML response regardless of structure
-    html = html.replace(/(<head[^>]*>)/i, `$1
-${metaTag}
-`) || 
-         html.replace(/(<html[^>]*>)/i, `$1
-<head>
-${metaTag}
-</head>
-`) || 
-         html.replace(/(^|<!DOCTYPE[^>]*>)/i, `$1<head>
-${metaTag}
-</head>
-`);
-    
-    // Create response with modified HTML
-    const newResponse = new Response(html, {
+    const newResponse = new Response(response.body, {
       status: response.status,
       statusText: response.statusText,
       headers: response.headers
     });
     
     // Set A/B test cookie with security flags - HttpOnly prevents XSS access
-    // JavaScript reads variant from meta tags, not cookies
     newResponse.headers.set('Set-Cookie', 
       `${test.cookieName}=${variant}; Path=/; Max-Age=${CONFIG.COOKIE_MAX_AGE}; SameSite=Lax; Secure; HttpOnly`);
     
@@ -388,7 +345,7 @@ ${metaTag}
     if (env?.DEBUG) {
       newResponse.headers.set('X-AB-Debug-Cookie', `${test.cookieName}=${variant}`);
       newResponse.headers.set('X-AB-Debug-Generated', variant === getVariantFromRequest(request, test.cookieName) ? 'false' : 'true');
-      newResponse.headers.set('X-AB-Debug-Meta-Injected', 'true');
+      newResponse.headers.set('X-AB-Debug-Server-Side', 'true');
     }
     
     return newResponse;
