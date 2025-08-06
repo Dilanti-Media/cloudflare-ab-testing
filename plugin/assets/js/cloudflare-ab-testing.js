@@ -12,21 +12,12 @@
     }
 
     /**
-     * Helper to read a cookie by name.
-     * @param {string} name - The name of the cookie.
-     * @returns {string|null} - The cookie value or null if not found.
+     * Get variant from meta tags (primary) or URL parameter (debugging)
+     * @param {string} cookieName - The cookie name for the test
+     * @returns {string} - The variant 'A' or 'B'
      */
-    function getCookieValue(name) {
-        const re = new RegExp(`(?:^|; )${name.replace(/([\.$?*|{}\\(\)\[\]\\\/\+^])/g, '\\$1')}=([^;]*)`);
-        const match = document.cookie.match(re);
-        return match ? decodeURIComponent(match[1]) : null;
-    }
 
-    /**
-     * Get variant from Cloudflare Worker servers (meta tag or headers)
-     * This trusts the worker's actual assignment, bypassing cookies entirely
-     */
-    function getActualVariant(cookieName) {
+    function getVariant(cookieName) {
         // Primary: Check Cloudflare Worker meta tag (server-assigned)
         const workerVariant = document.querySelector('meta[name="cf-ab-variant"]')?.content?.trim();
         if (workerVariant === 'A' || workerVariant === 'B') {
@@ -104,19 +95,17 @@
                 return;
             }
 
-            // Get variant from multiple sources
-            const variant = getActualVariant(entry.cookieName);
-            const cookieValue = getCookieValue(entry.cookieName);
+            // Get variant from meta tags (server-side injection)
+            const variant = getVariant(entry.cookieName);
 
             // Enhanced debugging
             if (window.cloudflareAbTesting?.debug) {
                 console.log('[A/B Debug] Test:', entry.test, {
-                    'Cookie Value': cookieValue,
                     'Final Variant': variant,
-                    'Cookie Name': entry.cookieName,
-                    'All Cookies': document.cookie,
-                    'Meta Tag': document.querySelector('meta[name="cf-ab-variant"]')?.content,
-                    'URL Params': window.location.search
+                    'Test Name': entry.cookieName,
+                    'Meta Tag Variant': document.querySelector('meta[name="cf-ab-variant"]')?.content,
+                    'Meta Tag Test': document.querySelector('meta[name="cf-ab-test"]')?.content,
+                    'URL Override': new URLSearchParams(window.location.search).get(entry.cookieName)
                 });
             }
 
@@ -172,7 +161,7 @@
         initializeWithRetry();
     }
 
-    // Visual debug indicator removed to avoid confusion from stale cookie values
-    // The actual variant is determined by the Cloudflare Worker, not JavaScript cookies
+    // Visual debug indicator removed - variant is now reliably read from server-side meta tags
+    // The actual variant is determined by the Cloudflare Worker and injected via PHP wp_head
 
 })();
