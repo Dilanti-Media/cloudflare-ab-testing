@@ -138,19 +138,22 @@ fi
 # Create zip file
 echo -e "${YELLOW}Creating zip file...${NC}"
 cd "$BUILD_DIR/cloudflare-ab-testing"
-ZIP_NAME="cloudflare-ab-testing-v$VERSION.zip"
+ZIP_NAME="cloudflare-ab-testing.zip"
+VERSIONED_ZIP_NAME="cloudflare-ab-testing-v$VERSION.zip"
 zip -r "../$ZIP_NAME" . -x "*.git*" "*.svn*" "node_modules/*"
 
-# Move to releases directory
-mv "../$ZIP_NAME" "$RELEASES_DIR/"
+# Move to releases directory and create versioned copy
+mv "../$ZIP_NAME" "$RELEASES_DIR/$VERSIONED_ZIP_NAME"
+cp "$RELEASES_DIR/$VERSIONED_ZIP_NAME" "$RELEASES_DIR/$ZIP_NAME"
 
 # Create latest symlink for easy access
 cd "$RELEASES_DIR"
 rm -f cloudflare-ab-testing-latest.zip
-ln -s "$ZIP_NAME" cloudflare-ab-testing-latest.zip
+ln -s "$VERSIONED_ZIP_NAME" cloudflare-ab-testing-latest.zip
 
 echo -e "${GREEN}✓ Plugin built successfully!${NC}"
-echo -e "${GREEN}✓ Release file: $RELEASES_DIR/$ZIP_NAME${NC}"
+echo -e "${GREEN}✓ WordPress-compatible: $RELEASES_DIR/$ZIP_NAME${NC}"
+echo -e "${GREEN}✓ Versioned release: $RELEASES_DIR/$VERSIONED_ZIP_NAME${NC}"
 echo -e "${GREEN}✓ Latest symlink: $RELEASES_DIR/cloudflare-ab-testing-latest.zip${NC}"
 
 # Cleanup
@@ -159,9 +162,12 @@ rm -rf "$BUILD_DIR/cloudflare-ab-testing"
 # GitHub Release Instructions
 echo -e "\n${YELLOW}=== GitHub Release Instructions ===${NC}"
 echo -e "1. Create a new release on GitHub with tag: ${GREEN}v$VERSION${NC}"
-echo -e "2. Upload the zip file: ${GREEN}$RELEASES_DIR/$ZIP_NAME${NC}"
+echo -e "2. Upload the versioned zip file: ${GREEN}$RELEASES_DIR/$VERSIONED_ZIP_NAME${NC}"
 echo -e "3. Add release notes describing changes in this version"
 echo -e "4. Set as the latest release for auto-updater compatibility"
+echo -e "\n${YELLOW}=== WordPress Update Instructions ===${NC}"
+echo -e "• For WordPress admin updates, use: ${GREEN}$RELEASES_DIR/$ZIP_NAME${NC}"
+echo -e "• This filename ensures correct folder extraction in WordPress"
 echo -e "\n${YELLOW}=== Auto-updater Configuration ===${NC}"
 echo -e "Users need to configure these settings in WordPress admin:"
 echo -e "• GitHub Username: ${GREEN}[your-github-username]${NC}"
