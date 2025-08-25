@@ -43,8 +43,9 @@ async function startOriginServer() {
 function parseCookie(setCookie, name) {
   if (!setCookie) return null;
   const arr = Array.isArray(setCookie) ? setCookie : [setCookie];
+  const regex = new RegExp(`${name}=([A-Za-z0-9_\-]+)`);
   for (const line of arr) {
-    const match = line.match(new RegExp(`${name}=([A-Za-z0-9_\-]+)`));
+    const match = line.match(regex);
     if (match) return match[1];
   }
   return null;

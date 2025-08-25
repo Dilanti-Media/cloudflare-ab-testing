@@ -2,9 +2,13 @@
 require('dotenv').config();
 const puppeteer = require('puppeteer'); // or 'puppeteer-core' if you have a local Chromium
 
+// Environment variable names
+const SQUID_PROXY_USERNAME_ENV = 'SQUID_PROXY_USERNAME';
+const SQUID_PROXY_PASSWORD_ENV = 'SQUID_PROXY_PASSWORD';
+
 // Environment variables validation
-if (!process.env.SQUID_PROXY_USERNAME || !process.env.SQUID_PROXY_PASSWORD) {
-  console.error('❌ Missing required environment variables: SQUID_PROXY_USERNAME, SQUID_PROXY_PASSWORD');
+if (!process.env[SQUID_PROXY_USERNAME_ENV] || !process.env[SQUID_PROXY_PASSWORD_ENV]) {
+  console.error(`❌ Missing required environment variables: ${SQUID_PROXY_USERNAME_ENV}, ${SQUID_PROXY_PASSWORD_ENV}`);
   process.exit(1);
 }
 
@@ -60,8 +64,8 @@ async function testProxy(proxy, retryCount = 0) {
 
     // Squid proxy authentication
     await page.authenticate({
-      username: process.env.SQUID_PROXY_USERNAME,
-      password: process.env.SQUID_PROXY_PASSWORD
+      username: process.env[SQUID_PROXY_USERNAME_ENV],
+      password: process.env[SQUID_PROXY_PASSWORD_ENV]
     });
 
     // Enhanced GA4 hit detection with broader monitoring
