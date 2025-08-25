@@ -10,7 +10,8 @@ const CONFIG = {
   VALID_VARIANTS: ['A', 'B'],
   MAX_COOKIE_SIZE: 8192,
   REGISTRY_CACHE_TTL: 300, // 5 minutes
-  KV_TIMEOUT_MS: 5000 // Timeout for KV operations
+  KV_TIMEOUT_MS: 5000, // Timeout for KV operations
+  COOKIE_REGEX_CACHE_MAX_SIZE: 50 // Max cached cookie regex patterns
 };
 
 // Pre-compile regex and sets for performance
@@ -57,6 +58,15 @@ function logWarn(env, ...args) {
 function logError(...args) {
   // Always log errors, even in production
   console.error(...args);
+}
+
+// Simple fallback hash helper (32-bit)
+function simpleHash(input) {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    hash = ((hash << 5) - hash) + input.charCodeAt(i);
+  }
+  return hash;
 }
 
 // Basic config validation
@@ -393,8 +403,8 @@ function getVariantFromRequest(request, cookieName) {
   // Check cookie - more robust parsing with cached regex
   const cookies = request.headers.get('Cookie') || '';
   if (cookies) {
-    // Memory optimization: Clear cookieRegexCache when it exceeds 50 entries
-    if (cookieRegexCache.size > 50) {
+    // Memory optimization: Clear cookieRegexCache when it exceeds configured entries
+    if (cookieRegexCache.size > CONFIG.COOKIE_REGEX_CACHE_MAX_SIZE) {
       cookieRegexCache.clear();
     }
     // Use cached regex or create and cache new one
@@ -434,10 +444,7 @@ async function generateVariant(request) {
     return (hashArray[0] % 2) === 0 ? 'A' : 'B';
   } catch (error) {
     // Fallback to simple hash if WebCrypto fails
-    let hash = 0;
-    for (let i = 0; i < input.length; i++) {
-      hash = ((hash << 5) - hash) + input.charCodeAt(i);
-    }
+    const hash = simpleHash(input);
     return (hash % 2) === 0 ? 'A' : 'B';
   }
 }
