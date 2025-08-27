@@ -18,6 +18,12 @@ PLUGIN_DIR="$ROOT_DIR/plugin"
 BUILD_DIR="$ROOT_DIR/build"
 RELEASES_DIR="$ROOT_DIR/releases"
 
+# Detect CI environment (GitHub Actions, generic CI)
+IS_CI=false
+if [ -n "$CI" ] || [ -n "$GITHUB_ACTIONS" ]; then
+  IS_CI=true
+fi
+
 echo -e "${YELLOW}Building Cloudflare A/B Testing Plugin...${NC}"
 
 # Check if plugin directory exists
@@ -49,12 +55,18 @@ echo -e "${GREEN}Plugin version: $VERSION${NC}"
 # Check if this version already has a release
 EXISTING_RELEASE="$RELEASES_DIR/cloudflare-ab-testing-v$VERSION.zip"
 if [ -f "$EXISTING_RELEASE" ]; then
-    echo -e "${YELLOW}⚠️  Release already exists for version $VERSION${NC}"
-    read -p "Do you want to rebuild it? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo -e "${YELLOW}Build cancelled${NC}"
-        exit 0
+    if [ "$IS_CI" = true ]; then
+        echo -e "${YELLOW}⚠️  Release already exists for version $VERSION (CI mode) — rebuilding${NC}"
+        rm -f "$EXISTING_RELEASE"
+    else
+        echo -e "${YELLOW}⚠️  Release already exists for version $VERSION${NC}"
+        read -p "Do you want to rebuild it? (y/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo -e "${YELLOW}Build cancelled${NC}"
+            exit 0
+        fi
+        rm -f "$EXISTING_RELEASE"
     fi
 fi
 

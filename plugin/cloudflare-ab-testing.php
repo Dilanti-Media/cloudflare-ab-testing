@@ -3,7 +3,7 @@
  * Plugin Name:       Cloudflare A/B Testing
  * Plugin URI:        https://dilantimedia.com/
  * Description:       Provides A/B testing capabilities integrated with Cloudflare Workers.
- * Version:           2.1.8
+ * Version:           2.1.9
  * Author:            Dilanti Media
  * Author URI:        https://dilantimedia.com/
  * License:           GPL-2.0+
@@ -62,7 +62,7 @@ function cloudflare_ab_get_cookie_for_current_path() {
         if ( ! $slug ) continue;
 
         $paths = array_filter( array_map( 'trim', explode( ',', $paths_part ) ) );
-        
+
         // Use same matching logic as your old working code
         foreach ( $paths as $path ) {
             if ( $current_path === $path || strpos( $current_path, $path . '/' ) === 0 ) {
@@ -73,7 +73,7 @@ function cloudflare_ab_get_cookie_for_current_path() {
     return null;
 }
 
-// Inject A/B meta tags early in head (before any shortcodes) 
+// Inject A/B meta tags early in head (before any shortcodes)
 add_action( 'wp_head', 'cloudflare_ab_inject_meta_tags', 1 );
 
 // Alternative meta tag injection using output buffering (more aggressive) - DISABLED DUE TO SITE BREAKING
@@ -90,30 +90,30 @@ function cloudflare_ab_inject_meta_tags() {
     if ( is_admin() ) {
         return;
     }
-    
+
     // Get A/B test info from Cloudflare Worker headers
     $ab_test = '';
     $ab_variant = '';
-    
+
     // Check for worker headers in $_SERVER
     // Note: HTTP headers with hyphens become underscores in PHP $_SERVER
     $possible_variant_headers = ['HTTP_X_AB_VARIANT'];
     $possible_test_headers = ['HTTP_X_AB_TEST'];
-    
+
     foreach ( $possible_test_headers as $header ) {
         if ( isset( $_SERVER[$header] ) && ! empty( $_SERVER[$header] ) ) {
             $ab_test = sanitize_text_field( $_SERVER[$header] );
             break;
         }
     }
-    
+
     foreach ( $possible_variant_headers as $header ) {
         if ( isset( $_SERVER[$header] ) && ! empty( $_SERVER[$header] ) ) {
             $ab_variant = sanitize_text_field( $_SERVER[$header] );
             break;
         }
     }
-    
+
     // If we have a variant but no test name, infer it from current path configuration
     if ( ! empty( $ab_variant ) && empty( $ab_test ) ) {
         $cookie_name = cloudflare_ab_get_cookie_for_current_path();
@@ -123,7 +123,7 @@ function cloudflare_ab_inject_meta_tags() {
             $ab_test = trim( $ab_test, '_' );
         }
     }
-    
+
     // If no worker headers found, check for specific test headers
     if ( empty( $ab_variant ) ) {
         $cookie_name = cloudflare_ab_get_cookie_for_current_path();
@@ -136,17 +136,17 @@ function cloudflare_ab_inject_meta_tags() {
             }
         }
     }
-    
+
     // Final check: if we have a valid variant, proceed
     if ( empty( $ab_variant ) ) {
         return;
     }
-    
+
     // Only inject if we have a valid variant from the worker
     if ( in_array( $ab_variant, [ 'A', 'B' ] ) ) {
         echo '<meta name="cf-ab-variant" content="' . esc_attr( $ab_variant ) . '">' . "\n";
         echo '<meta name="cf-ab-test" content="' . esc_attr( $ab_test ) . '">' . "\n";
-        
+
         // Debug comment (only visible in HTML source when WP_DEBUG is enabled)
         if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
             echo '<!-- CF-AB-DEBUG: variant=' . esc_attr( $ab_variant ) . ', test=' . esc_attr( $ab_test ) . ' -->' . "\n";
@@ -163,10 +163,10 @@ add_action( 'wp_ajax_cloudflare_ab_save_worker_version', 'cloudflare_ab_save_wor
 
 function cloudflare_ab_enqueue_assets() {
     // Force no-caching headers for debugging (only when debug mode is enabled)
-    $debug_enabled = ( 
+    $debug_enabled = (
         ( isset( $_GET['ab_debug'] ) && $_GET['ab_debug'] === '1' && is_user_logged_in() && current_user_can( 'manage_options' ) )
     );
-    
+
     if ( ! headers_sent() && $debug_enabled ) {
         header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
         header("Pragma: no-cache");
@@ -206,15 +206,15 @@ function cloudflare_ab_enqueue_assets() {
     // Get GA4 settings for JavaScript
     $ga4_settings = get_option( 'cloudflare_ab_ga4_settings', [] );
     $ga4_enabled = isset( $ga4_settings['enabled'] ) ? (bool) $ga4_settings['enabled'] : false;
-    
+
     $js_config = [
         'registry' => $tests,
-        'debug' => ( 
+        'debug' => (
             // Only enable debug if explicitly requested via URL parameter AND user is admin
             ( isset( $_GET['ab_debug'] ) && $_GET['ab_debug'] === '1' && is_user_logged_in() && current_user_can( 'manage_options' ) )
         )
     ];
-    
+
     // Add GA4 configuration if enabled
     if ( $ga4_enabled ) {
         $js_config['ga4'] = [
@@ -223,9 +223,9 @@ function cloudflare_ab_enqueue_assets() {
             'custom_dimensions' => !empty( $ga4_settings['custom_dimensions'] ) ? $ga4_settings['custom_dimensions'] : '',
         ];
     }
-    
+
     wp_localize_script( 'cloudflare-ab-testing-script', 'cloudflareAbTesting', $js_config );
-    
+
     // Enqueue GA4 tracking script if enabled
     if ( $ga4_enabled ) {
         wp_enqueue_script(
@@ -249,7 +249,7 @@ function cloudflare_ab_enqueue_admin_assets( $hook ) {
     if ( strpos( $hook, 'cloudflare-ab' ) === false ) {
         return;
     }
-    
+
     // Enqueue admin CSS
     wp_enqueue_style(
         'cloudflare-ab-admin-styles',
@@ -257,7 +257,7 @@ function cloudflare_ab_enqueue_admin_assets( $hook ) {
         [],
         CLOUDFLARE_AB_TESTING_VERSION
     );
-    
+
     // Enqueue admin JS
     wp_enqueue_script(
         'cloudflare-ab-admin-scripts',
@@ -266,7 +266,7 @@ function cloudflare_ab_enqueue_admin_assets( $hook ) {
         CLOUDFLARE_AB_TESTING_VERSION . '.' . time(),
         true
     );
-    
+
     // Localize script for AJAX
     wp_localize_script( 'cloudflare-ab-admin-scripts', 'cloudflareAbAdmin', [
         'nonce' => wp_create_nonce( 'cloudflare_ab_admin_nonce' ),
@@ -285,22 +285,22 @@ function cloudflare_ab_save_worker_version() {
     if ( ! wp_verify_nonce( $_POST['nonce'], 'cloudflare_ab_admin_nonce' ) ) {
         wp_die( 'Security check failed' );
     }
-    
+
     // Check permissions
     if ( ! current_user_can( 'manage_options' ) ) {
         wp_die( 'Insufficient permissions' );
     }
-    
+
     $worker_version = sanitize_text_field( $_POST['worker_version'] );
-    
+
     // Validate worker version
     if ( ! in_array( $worker_version, ['simple', 'cache'] ) ) {
         wp_send_json_error( 'Invalid worker version' );
     }
-    
+
     // Save the preference
     update_option( 'cloudflare_ab_worker_version', $worker_version );
-    
+
     wp_send_json_success( 'Worker version preference saved' );
 }
 
