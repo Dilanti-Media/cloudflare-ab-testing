@@ -66,7 +66,7 @@ function simpleHash(input) {
   for (let i = 0; i < input.length; i++) {
     hash = ((hash << 5) - hash) + input.charCodeAt(i);
   }
-  return hash;
+  return hash >>> 0; // ensure unsigned 32-bit
 }
 
 // Basic config validation
@@ -445,6 +445,6 @@ async function generateVariant(request) {
   } catch (error) {
     // Fallback to simple hash if WebCrypto fails
     const hash = simpleHash(input);
-    return (hash % 2) === 0 ? 'A' : 'B';
+    return ((hash >>> 0) % 2) === 0 ? 'A' : 'B';
   }
 }
