@@ -1,6 +1,6 @@
 // test-ga4.js
 require('dotenv').config();
-const puppeteer = require('puppeteer'); // or 'puppeteer-core' if you have a local Chromium
+const puppeteer = require('puppeteer');
 
 // Environment variable names
 const SQUID_PROXY_USERNAME_ENV = 'SQUID_PROXY_USERNAME';
