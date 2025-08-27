@@ -1,23 +1,36 @@
 # A/B Testing System Verification
 
-This directory contains the comprehensive test suite for validating the Cloudflare A/B testing system with auto-updater functionality.
+This directory contains the comprehensive test suite for validating the Cloudflare A/B testing system.
 
-## 🧪 Available Tests
+## Available Tests
 
-### `test-ab-complete.js` - Complete System Verification ⭐
+### test-ga4.js – GA4 Detection and Analytics Testing
 
-**The primary and recommended test for all A/B testing validation.**
-
-This comprehensive test performs:
-
-1. **Algorithm Testing** - Validates 50/50 distribution with 10,000 simulated samples
-2. **Live System Testing** - Tests real system using proxies across different IP addresses  
-3. **Content Verification** - Confirms correct A/B button variants are displayed
-4. **Header Synchronization** - Verifies Cloudflare Worker ↔ WordPress communication
-5. **Performance Metrics** - Reports system health and identifies issues
-6. **Cache Worker Testing** - Validates performance-optimized worker version
+- Headless Chrome to detect standard GA4 and custom/proxy endpoints
+- Multi-proxy testing, diagnostics when no hits are detected
 
 **Usage:**
+
+```bash
+# Requires puppeteer and proxy credentials
+npm install puppeteer
+node test-ga4.js
+
+# Environment variables:
+TARGET_URL=https://your-site-with-ab-tests.com  # Default: test site
+MAX_CONCURRENT=3                                # Concurrent proxy tests
+TIMEOUT=60000                                  # Request timeout in ms
+WAIT_TIME=10000                                # Time to wait for analytics to fire
+LOG_DETAILED_HITS=true                         # Show detailed hit information
+```
+
+### test-ab-complete.js – Complete System Verification
+
+- Algorithm distribution (10k samples)
+- Live system check via proxies (header/meta/content sync)
+
+**Usage:**
+
 ```bash
 # Run complete test suite (includes both algorithm and live testing)
 node test-ab-complete.js
@@ -31,47 +44,39 @@ node test-ab-complete.js
 - Node.js 16+ 
 - For live testing: `.env` file with `SQUID_PROXY_USERNAME` and `SQUID_PROXY_PASSWORD`
 
-### `test-cache-worker.js` - Cache Performance Testing
+### test-cache-worker.js – Cache Worker Feature Check
 
-**Specialized test for the cache-optimized worker version.**
-
-This test validates:
-- Multi-layer caching performance (Memory + Cache API + KV)
-- LRU eviction mechanisms
-- Response time improvements
-- Cache hit/miss ratios
-- Memory optimization
+- Verifies presence of critical cache worker features:
+  - X-AB-Variant request header
+  - WordPress bypasses
+  - Proper timeouts and KV timeout
+  - Cache API no-test path caching and v1 registry key
+  - POST bypass
 
 **Usage:**
+
 ```bash
 node test-cache-worker.js
 ```
 
-## 🎯 Test Results & Validation
+### Jest unit and integration tests (Miniflare)
 
-### ✅ **Production Validation Status**
+- Parity checks for headers/cookies and config flags
+- Miniflare integration tests cover:
+  - Variant assignment and cookies
+  - Admin/static/POST/preview/logged-in/large-cookie bypasses
+  - URL param forced variant
+  - Debug headers (env.DEBUG)
+  - Cache API no-test path persistence across registry updates
 
-All tests confirm the system is production-ready:
+**Run all Jest tests:**
 
-#### **Algorithm Validation**
-- **Distribution**: 50.07% A, 49.93% B across 10,000 samples
-- **Consistency**: Same user always gets same variant
-- **Hash Function**: Cryptographically sound with even distribution
+```bash
+npm test
+```
 
-#### **Real-World Testing**
-- **Geographic Coverage**: Tested across multiple Cloudflare edge locations
-- **Proxy Validation**: Perfect distribution across 10 different IP addresses
-- **Performance**: Cache worker shows 40% improvement in response times
+## Environment Setup
 
-#### **WordPress Integration**
-- **Admin Interface**: Full functionality tested
-- **Auto-Updater**: GitHub integration validated
-- **Worker Deployment**: Both Simple and Cache versions tested
-- **Settings Persistence**: Configuration maintained across updates
-
-## 🔧 Testing Environment Setup
-
-### Prerequisites
 ```bash
 # Install Node.js dependencies (if any)
 npm install
@@ -81,154 +86,7 @@ cp .env.example .env
 # Edit .env with your proxy credentials
 ```
 
-### Running Tests
+## Troubleshooting
 
-```bash
-# From project root
-cd testing/
-
-# Run main test suite
-node test-ab-complete.js
-
-# Run cache performance test
-node test-cache-worker.js
-
-# The scripts automatically handle what tests to run based on available credentials
-```
-
-### Test Configuration
-
-Create `.env` file for proxy testing:
-```env
-SQUID_PROXY_USERNAME=your_username
-SQUID_PROXY_PASSWORD=your_password
-```
-
-## 📊 Understanding Test Output
-
-### Algorithm Test Output
-```
-🧪 Testing A/B algorithm with 10000 samples...
-✅ Variant A: 5035 (50.35%)
-✅ Variant B: 4965 (49.65%)
-✅ Distribution within acceptable range (49%-51%)
-```
-
-### Live System Test Output
-```
-🌐 Testing live system across 10 proxy IPs...
-✅ IP 1: Variant A - Button: "Sign Up"
-✅ IP 2: Variant B - Button: "Get Started"
-✅ Content matches headers: 100%
-```
-
-### Performance Metrics
-```
-⚡ Performance Results:
-✅ Average Response Time: 45ms
-✅ Cache Hit Rate: 85%
-✅ Worker Memory Usage: 12MB
-✅ KV Operations: 150/min
-```
-
-## 🐛 Troubleshooting Tests
-
-### Common Issues
-
-1. **Algorithm Test Fails**
-   - Check hash function implementation
-   - Verify sample size is sufficient
-   - Review distribution calculation logic
-
-2. **Live Test Fails**
-   - Verify proxy credentials in `.env`
-   - Check website is accessible via proxies
-   - Ensure Cloudflare Worker is deployed
-
-3. **Performance Issues**
-   - Monitor Cloudflare Worker logs
-   - Check KV namespace quota and usage
-   - Verify cache settings configuration
-
-4. **Content Mismatch**
-   - Verify WordPress shortcodes are working
-   - Check variant assignment consistency
-   - Review worker header passing logic
-
-### Debug Mode
-
-Enable debug output for detailed information:
-```bash
-# Set debug mode
-export DEBUG=true
-node test-ab-complete.js
-
-# Or inline
-DEBUG=true node test-ab-complete.js
-```
-
-## 🔄 Integration with Development Workflow
-
-### Pre-Release Testing
-
-Before any plugin release:
-```bash
-# 1. Version consistency check
-../scripts/version-sync.sh check
-
-# 2. Run comprehensive tests
-node test-ab-complete.js
-node test-cache-worker.js
-
-# 3. Build and deploy test
-../scripts/build-plugin.sh
-```
-
-### Continuous Integration
-
-Tests are structured for CI/CD integration:
-```yaml
-# Example GitHub Actions integration
-- name: Run A/B Testing Suite
-  run: |
-    cd testing/
-    node test-ab-complete.js
-    node test-cache-worker.js
-```
-
-### WordPress Testing
-
-In addition to these tests, also validate:
-1. **Plugin Installation** - Test WordPress admin upload
-2. **Auto-Updater** - Verify GitHub integration works
-3. **Admin Interface** - Check all settings pages
-4. **Worker Deployment** - Test through WordPress admin
-5. **Diagnostics** - Run built-in diagnostic tools
-
-## 📈 Performance Benchmarking
-
-### Baseline Metrics
-- **Simple Worker**: ~30ms average response time
-- **Cache Worker**: ~18ms average response time (40% improvement)
-- **Memory Usage**: <15MB peak usage
-- **KV Operations**: <200 requests/minute at 10k RPM
-
-### Monitoring Recommendations
-- Set up Cloudflare Analytics monitoring
-- Monitor worker CPU time and memory usage
-- Track KV storage quota and operations
-- Set up alerts for performance degradation
-
-## 📖 Additional Resources
-
-- **Installation Guide**: [../docs/installation.md](../docs/installation.md)
-- **Auto-Updater Setup**: [../docs/auto-updater-setup.md](../docs/auto-updater-setup.md)
-- **Development Workflow**: [../SYNC_INSTRUCTIONS.md](../SYNC_INSTRUCTIONS.md)
-- **Release Notes**: [../RELEASE_NOTES.md](../RELEASE_NOTES.md)
-
----
-
-**Need Help?**
-- 🐛 [GitHub Issues](https://github.com/YOUR_USERNAME/cloudflare-ab-testing/issues)
-- 📧 [Email Support](mailto:support@dilantimedia.com)
-- 📖 [Main Documentation](../README.md)
+- If GA4 hits are sporadic, that’s normal; the suite accepts successful hits across proxies
+- Ensure the worker is deployed and KV bound (AB_TESTS_KV) if registry is used
