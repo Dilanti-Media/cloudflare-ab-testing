@@ -26,7 +26,11 @@ const PROXIES = [
 ];
 
 // The page you want to test
-const TARGET_URL = process.env.TARGET_URL || 'https://your-site-with-ab-tests.com';
+const TARGET_URL = process.env.TARGET_URL;
+if (!TARGET_URL) {
+  console.error('❌ Missing required environment variable: TARGET_URL');
+  process.exit(1);
+}
 
 // Configuration
 const CONFIG = {
