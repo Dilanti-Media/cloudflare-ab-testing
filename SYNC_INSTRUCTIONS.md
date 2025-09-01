@@ -56,15 +56,14 @@ Before any release, ensure version consistency:
 ### 2. Local Testing
 
 ```bash
-# Test algorithm distribution
-cd testing/
-node test-ab-complete.js
+# Unit & integration (Jest)
+npm test
 
-# Test cache worker performance
-node test-cache-worker.js
+# E2E proxy tests (require .env with TARGET_URL and proxy creds)
+npm run test:proxy:all
 
-# Run comprehensive tests
-npm test  # If package.json scripts are configured
+# Full suite (unit + E2E)
+npm run test:all
 ```
 
 ### 3. Plugin Validation
@@ -225,9 +224,8 @@ chmod +x scripts/*.sh
 # Check version status
 ./scripts/version-sync.sh check
 
-# Run tests
-cd testing/
-node test-ab-complete.js
+# Run tests (unit + E2E)
+npm run test:all
 ```
 
 ## 📋 Pre-Release Checklist
@@ -246,12 +244,11 @@ Before creating any release:
 
 ## 🔄 Continuous Integration
 
-### Automated Testing (Future)
+### Automated Testing (Example)
 
 The project structure supports CI/CD integration:
 
 ```yaml
-# Example GitHub Actions workflow
 name: Test and Release
 on:
   push:
@@ -260,16 +257,20 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - name: Run tests
-        run: |
-          cd testing/
-          node test-ab-complete.js
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: Run tests (unit + E2E)
+        env:
+          TARGET_URL: ${{ secrets.TARGET_URL }}
+          SQUID_PROXY_USERNAME: ${{ secrets.SQUID_PROXY_USERNAME }}
+          SQUID_PROXY_PASSWORD: ${{ secrets.SQUID_PROXY_PASSWORD }}
+        run: npm run test:all
       - name: Build plugin
         run: ./scripts/build-plugin.sh
-      - name: Create release
-        uses: actions/upload-release-asset@v1
-        # ... release automation
+      # Release automation would go here
 ```
 
 ---
