@@ -2,6 +2,7 @@
  * Cloudflare A/B Testing Plugin - Admin Scripts
  * Enhanced admin interface functionality
  */
+/* global ajaxurl, cloudflareAbAdmin */
 
 (function($) {
     'use strict';
@@ -21,15 +22,15 @@
     function initializeAdminInterface() {
         // Add fade-in animation to main content
         $('.cloudflare-ab-admin').addClass('ab-fade-in');
-        
+
         // Add slide-in animation to cards
         $('.ab-status-card').each(function(index) {
             $(this).delay(index * 100).addClass('ab-slide-in');
         });
-        
+
         // Setup tooltips
         setupTooltips();
-        
+
         // Setup copy-to-clipboard functionality
         setupCopyToClipboard();
     }
@@ -42,7 +43,7 @@
         $('input[required], textarea[required], select[required]').on('blur', function() {
             validateField($(this));
         });
-        
+
         // Validate form on submit
         $('form').on('submit', function(e) {
             if (!validateForm($(this))) {
@@ -58,18 +59,18 @@
     function validateField($field) {
         const value = $field.val().trim();
         const fieldName = $field.attr('name') || 'field';
-        
+
         // Remove existing validation styling
         $field.removeClass('ab-field-error ab-field-success');
         $field.siblings('.ab-field-error-message').remove();
-        
+
         // Check if required field is empty
         if ($field.attr('required') && !value) {
             $field.addClass('ab-field-error');
             $field.after('<div class="ab-field-error-message">This field is required</div>');
             return false;
         }
-        
+
         // Validate specific field types
         if (fieldName.includes('account_id') && value) {
             if (!/^[a-f0-9]{32}$/.test(value)) {
@@ -78,7 +79,7 @@
                 return false;
             }
         }
-        
+
         if (fieldName.includes('namespace_id') && value) {
             if (!/^[a-f0-9]{32}$/.test(value)) {
                 $field.addClass('ab-field-error');
@@ -86,7 +87,7 @@
                 return false;
             }
         }
-        
+
         if (fieldName.includes('api_token') && value) {
             if (!/^[A-Za-z0-9_-]{40}$/.test(value)) {
                 $field.addClass('ab-field-error');
@@ -94,12 +95,12 @@
                 return false;
             }
         }
-        
+
         // Field is valid
         if (value) {
             $field.addClass('ab-field-success');
         }
-        
+
         return true;
     }
 
@@ -108,13 +109,13 @@
      */
     function validateForm($form) {
         let isValid = true;
-        
+
         $form.find('input[required], textarea[required], select[required]').each(function() {
             if (!validateField($(this))) {
                 isValid = false;
             }
         });
-        
+
         return isValid;
     }
 
@@ -126,10 +127,10 @@
         $('form').on('submit', function() {
             const $form = $(this);
             const $submitBtn = $form.find('input[type="submit"], button[type="submit"]');
-            
+
             if ($submitBtn.length) {
                 $submitBtn.addClass('ab-btn-loading').prop('disabled', true);
-                
+
                 // Reset after 10 seconds as failsafe
                 setTimeout(() => {
                     $submitBtn.removeClass('ab-btn-loading').prop('disabled', false);
@@ -145,7 +146,7 @@
         // Save worker version selection when it changes
         $('#worker-version').on('change', function() {
             const workerVersion = $(this).val();
-            
+
             // Save the selection via AJAX
             $.ajax({
                 url: ajaxurl,
@@ -162,31 +163,31 @@
                 }
             });
         });
-        
+
         // Worker deployment
         $('.ab-deploy-worker').on('click', function(e) {
             e.preventDefault();
-            
+
             const $btn = $(this);
             const workerType = $('#worker-version').val() || 'simple';
-            
+
             deployWorker(workerType, $btn);
         });
-        
+
         // Worker update
         $('.ab-update-worker').on('click', function(e) {
             e.preventDefault();
-            
+
             const $btn = $(this);
             const workerType = $('#worker-version').val() || 'simple';
-            
+
             updateWorker(workerType, $btn);
         });
-        
+
         // Worker deletion with confirmation
         $('.ab-delete-worker').on('click', function(e) {
             e.preventDefault();
-            
+
             if (confirm('Are you sure you want to delete the worker? This action cannot be undone.')) {
                 const $btn = $(this);
                 deleteWorker($btn);
@@ -199,7 +200,7 @@
      */
     function deployWorker(workerType, $btn) {
         $btn.addClass('ab-btn-loading').prop('disabled', true);
-        
+
         $.ajax({
             url: ajaxurl,
             type: 'POST',
@@ -230,7 +231,7 @@
      */
     function updateWorker(workerType, $btn) {
         $btn.addClass('ab-btn-loading').prop('disabled', true);
-        
+
         $.ajax({
             url: ajaxurl,
             type: 'POST',
@@ -260,7 +261,7 @@
      */
     function deleteWorker($btn) {
         $btn.addClass('ab-btn-loading').prop('disabled', true);
-        
+
         $.ajax({
             url: ajaxurl,
             type: 'POST',
@@ -292,25 +293,25 @@
         // Add test configuration helper
         $('.ab-add-test-config').on('click', function(e) {
             e.preventDefault();
-            
+
             const testName = prompt('Enter test name (e.g., "homepage_banner"):');
             const testPaths = prompt('Enter test paths (comma-separated, e.g., "/,/home"):');
-            
+
             if (testName && testPaths) {
                 const $textarea = $('textarea[name="cloudflare_ab_enabled_urls"]');
                 const currentValue = $textarea.val().trim();
                 const newLine = testName + '|' + testPaths;
-                
+
                 if (currentValue) {
                     $textarea.val(currentValue + '\n' + newLine);
                 } else {
                     $textarea.val(newLine);
                 }
-                
+
                 showNotification('Test configuration added!', 'success');
             }
         });
-        
+
         // Validate test configuration format
         $('textarea[name="cloudflare_ab_enabled_urls"]').on('blur', function() {
             validateTestConfiguration($(this));
@@ -324,33 +325,33 @@
         const value = $textarea.val().trim();
         const lines = value.split('\n');
         let errors = [];
-        
+
         lines.forEach((line, index) => {
             line = line.trim();
             if (!line) return;
-            
+
             if (!line.includes('|')) {
                 errors.push(`Line ${index + 1}: Missing '|' separator`);
                 return;
             }
-            
+
             const parts = line.split('|');
             if (parts.length !== 2) {
                 errors.push(`Line ${index + 1}: Invalid format`);
                 return;
             }
-            
+
             const testName = parts[0].trim();
             const paths = parts[1].trim();
-            
+
             if (!testName) {
                 errors.push(`Line ${index + 1}: Test name is required`);
             }
-            
+
             if (!paths) {
                 errors.push(`Line ${index + 1}: At least one path is required`);
             }
-            
+
             // Check if paths start with '/'
             const pathList = paths.split(',').map(p => p.trim());
             pathList.forEach(path => {
@@ -359,11 +360,11 @@
                 }
             });
         });
-        
+
         // Remove existing validation messages
         $textarea.siblings('.ab-field-error-message').remove();
         $textarea.removeClass('ab-field-error ab-field-success');
-        
+
         if (errors.length > 0) {
             $textarea.addClass('ab-field-error');
             $textarea.after('<div class="ab-field-error-message">' + errors.join('<br>') + '</div>');
@@ -371,7 +372,7 @@
         } else if (value) {
             $textarea.addClass('ab-field-success');
         }
-        
+
         return true;
     }
 
@@ -382,9 +383,9 @@
         const $statusEl = $('.ab-worker-status');
         const $icon = $statusEl.find('.ab-worker-status-icon');
         const $text = $statusEl.find('.ab-worker-status-text');
-        
+
         $statusEl.removeClass('active inactive');
-        
+
         if (status === 'active') {
             $statusEl.addClass('active');
             $icon.html('✅');
@@ -404,11 +405,11 @@
         $('[data-tooltip]').each(function() {
             const $el = $(this);
             const tooltipText = $el.data('tooltip');
-            
+
             $el.on('mouseenter', function() {
                 const $tooltip = $('<div class="ab-tooltip">' + tooltipText + '</div>');
                 $('body').append($tooltip);
-                
+
                 const rect = this.getBoundingClientRect();
                 $tooltip.css({
                     position: 'absolute',
@@ -417,7 +418,7 @@
                     zIndex: 9999
                 });
             });
-            
+
             $el.on('mouseleave', function() {
                 $('.ab-tooltip').remove();
             });
@@ -430,14 +431,14 @@
     function setupCopyToClipboard() {
         $('.ab-copy-btn').on('click', function(e) {
             e.preventDefault();
-            
+
             const $btn = $(this);
             const targetSelector = $btn.data('target');
             const $target = $(targetSelector);
-            
+
             if ($target.length) {
                 const text = $target.is('input, textarea') ? $target.val() : $target.text();
-                
+
                 if (navigator.clipboard) {
                     navigator.clipboard.writeText(text).then(() => {
                         showNotification('Copied to clipboard!', 'success');
@@ -465,7 +466,7 @@
             warning: '⚠️',
             info: 'ℹ️'
         };
-        
+
         const $notification = $(`
             <div class="ab-notification ab-notification-${type}">
                 <span class="ab-notification-icon">${icons[type]}</span>
@@ -473,9 +474,9 @@
                 <button class="ab-notification-close">&times;</button>
             </div>
         `);
-        
+
         $('body').append($notification);
-        
+
         // Position notification
         $notification.css({
             position: 'fixed',
@@ -483,12 +484,12 @@
             right: '20px',
             zIndex: 99999
         });
-        
+
         // Auto-hide after 5 seconds
         setTimeout(() => {
             $notification.fadeOut(() => $notification.remove());
         }, 5000);
-        
+
         // Manual close
         $notification.find('.ab-notification-close').on('click', () => {
             $notification.fadeOut(() => $notification.remove());

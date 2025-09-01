@@ -1,12 +1,23 @@
 # Changelog
 
+## [2.1.10] - 2025-09-01
+
+### 🧹 Maintenance
+- Prepare next GitHub release: bumped plugin version to 2.1.10 (header and constant)
+- Synced plugin readme Stable tag with current version
+- Verified build pipeline and release artifacts
+
+_No functional code changes since 2.1.9._
+
+---
+
 ## [2.1.9] - 2025-08-27
 
 ### 🚀 Features
 - Cache worker aligned with baseline defaults; added env DEBUG, registry validation, and debug headers
 - Multi-layer caching: in-memory + Cache API (v1) + KV with no-test path caching
 
-### 🔧 Improvements
+### 🛠️ Improvements
 - Robust variant generation using WebCrypto SHA-256 with unsigned 32-bit fallback
 - Circuit breaker for KV failures and explicit KV timeouts
 - Configurable cookie regex cache size (COOKIE_REGEX_CACHE_MAX_SIZE)
@@ -30,7 +41,7 @@
 - **Enhanced GitHub API error handling** - Added comprehensive error logging and validation
 - **Improved compatibility display** - Added parsing of compatibility information from release notes
 
-### 🔧 Technical Improvements
+### 🛠️ Technical Improvements
 - Enhanced version extraction from GitHub releases
 - Added robust version format validation with regex
 - Updated plugin updater with better error handling and debugging
