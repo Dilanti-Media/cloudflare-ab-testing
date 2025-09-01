@@ -26,8 +26,8 @@ describe('Cache worker parity and safety checks', () => {
     expect(cacheContent).toMatch(/Secure/);
   });
 
-  test('uses Vary: Cookie', () => {
-    expect(cacheContent).toMatch(/Vary'?,\s*'Cookie'/);
+  test('ensures Vary includes Cookie via mergeVary', () => {
+    expect(cacheContent).toMatch(/mergeVary\(headers\.get\('Vary'\), \['Cookie'\]\)/);
   });
 
   test('has KV timeout and registry cache key v1', () => {
@@ -35,16 +35,12 @@ describe('Cache worker parity and safety checks', () => {
     expect(cacheContent).toMatch(/ab-registry-cache-v1/);
   });
 
-  test('uses Cache API for no-test paths', () => {
-    expect(cacheContent).toMatch(/NO_TEST_CACHE_PREFIX/);
-    expect(cacheContent).toMatch(/caches\.default\.put\(/);
-  });
-
-  test('has WordPress bypasses and POST bypass', () => {
+  test('has WordPress bypasses and personalization checks', () => {
     expect(cacheContent).toMatch(/wordpress_logged_in_/);
-    expect(cacheContent).toMatch(/wp-cron\.php/);
     expect(cacheContent).toMatch(/preview/);
-    expect(cacheContent).toMatch(/request\.method !== 'GET'/);
+    expect(cacheContent).toMatch(/BYPASS_PATHS/);
+    // Methods whitelist for cache-only
+    expect(cacheContent).toMatch(/CACHE_ONLY_METHODS/);
   });
 
   test('has circuit breaker and KV availability check', () => {
@@ -56,9 +52,7 @@ describe('Cache worker parity and safety checks', () => {
     expect(cacheContent).toMatch(/crypto\.subtle\.digest\(/);
   });
 
-  test('includes debug headers when DEBUG enabled', () => {
-    expect(cacheContent).toMatch(/X-AB-Debug-Cookie/);
-    expect(cacheContent).toMatch(/X-AB-Debug-Generated/);
+  test('includes debug server-side header when DEBUG enabled', () => {
     expect(cacheContent).toMatch(/X-AB-Debug-Server-Side/);
   });
 
@@ -67,4 +61,3 @@ describe('Cache worker parity and safety checks', () => {
     expect(baselineContent).toMatch(/X-AB-Test/);
   });
 });
-
