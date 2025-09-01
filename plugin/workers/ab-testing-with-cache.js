@@ -5,82 +5,55 @@ export default {
 };
 
 const CONFIG = {
-  TIMEOUT_MS: 10000, // Reduced from 30s to 10s to avoid Cloudflare limits
-  COOKIE_MAX_AGE: 31536000, // 1 year
+  TIMEOUT_MS: 10000,          // fetch timeout
+  COOKIE_MAX_AGE: 31536000,   // 1 year
   VALID_VARIANTS: ['A', 'B'],
   MAX_COOKIE_SIZE: 8192,
-  REGISTRY_CACHE_TTL: 300, // 5 minutes
-  KV_TIMEOUT_MS: 5000, // Timeout for KV operations
-  COOKIE_REGEX_CACHE_MAX_SIZE: 50 // Max cached cookie regex patterns
+  REGISTRY_CACHE_TTL: 300,    // 5 minutes
+  KV_TIMEOUT_MS: 5000,        // Timeout for KV operations
+  EDGE_TTL: 300,              // Edge cache TTL for variant pages
+  CACHE_ONLY_METHODS: new Set(['GET', 'HEAD']),
+  STRIP_UTM_PARAMS: true,
+  UTM_PARAMS: new Set([
+    'utm_source','utm_medium','utm_campaign','utm_term','utm_content',
+    'gclid','fbclid','msclkid','mc_cid','mc_eid','_hsenc','_hsmi'
+  ])
 };
 
-// Pre-compile regex and sets for performance
+// Static files to bypass the AB worker
 const STATIC_EXTENSIONS = new Set([
-  'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg',
-  'css', 'js', 'woff', 'woff2', 'ttf', 'eot',
-  'pdf', 'zip', 'ico', 'xml', 'txt'
+  'jpg','jpeg','png','gif','webp','svg',
+  'css','js','woff','woff2','ttf','eot',
+  'pdf','zip','ico','xml','txt','map','webm','mp4','mov','avi'
 ]);
 
-const BYPASS_PATHS = [
-  '/wp-admin/', '/wp-json/', '/wp-login', '/wp-content/', '/wp-includes/',
-  '/wp-cron.php', '/xmlrpc.php', '/wp-trackback.php', '/wp-comments-post.php',
-  '/wp-signup.php', '/wp-activate.php', '/wp-links-opml.php'
-];
+const BYPASS_PATHS = ['/wp-admin/', '/wp-json/', '/wp-login', '/wp-content/', '/wp-includes/'];
 
-// Pre-compile cookie regexes to avoid per-request compilation
-const cookieRegexCache = new Map(); // cookieName -> RegExp
+// Cookie parsing cache
+const cookieRegexCache = new Map();
 
-// Check KV namespace binding once at module load
+// KV namespace availability memo
 let kvNamespaceAvailable = null;
 
-// In-memory cache for KV registry
+// In-memory registry cache
 let registryCache = null;
 let registryCacheTime = 0;
 let kvFailureCount = 0;
 const KV_FAILURE_THRESHOLD = 5;
 
-// Cache for common paths that have no tests (to avoid KV lookups) using Cache API
+// Cache for common paths with no tests (avoid extra KV lookups)
 const NO_TEST_CACHE_PREFIX = 'https://internal/no-test-cache/';
 
-// Simple logging with debug flag (controlled via env.DEBUG)
-function logInfo(env, ...args) {
-  if (env?.DEBUG) {
-    console.log(...args);
-  }
-}
+function logInfo(env, ...args) { if (env?.DEBUG) console.log(...args); }
+function logWarn(env, ...args) { if (env?.DEBUG) console.warn(...args); }
+function logError(...args) { console.error(...args); }
 
-function logWarn(env, ...args) {
-  if (env?.DEBUG) {
-    console.warn(...args);
-  }
-}
+if (!CONFIG.TIMEOUT_MS) throw new Error('Invalid worker configuration');
 
-function logError(...args) {
-  // Always log errors, even in production
-  console.error(...args);
-}
-
-// Simple fallback hash helper (32-bit)
-function simpleHash(input) {
-  let hash = 0;
-  for (let i = 0; i < input.length; i++) {
-    hash = ((hash << 5) - hash) + input.charCodeAt(i);
-  }
-  return hash >>> 0; // ensure unsigned 32-bit
-}
-
-// Basic config validation
-if (!CONFIG.TIMEOUT_MS) {
-  throw new Error('Invalid worker configuration');
-}
-
-// Check KV namespace availability once
 function checkKVNamespace(env) {
   if (kvNamespaceAvailable === null) {
     kvNamespaceAvailable = typeof env.AB_TESTS_KV !== 'undefined';
-    if (!kvNamespaceAvailable) {
-      logWarn(env, 'KV namespace not bound - A/B testing disabled');
-    }
+    if (!kvNamespaceAvailable) logWarn(env, 'KV namespace not bound - A/B testing disabled');
   }
   return kvNamespaceAvailable;
 }
@@ -92,55 +65,46 @@ async function handleRequest(request, env, ctx) {
     const url = new URL(request.url);
     const pathname = url.pathname;
 
-    try {
-      // Skip processing for WordPress admin, REST API, system paths, or static files
-      if (shouldBypassProcessing(url, request, env)) {
-        return fetch(request);
-      }
-
-      // Check if this path is known to have no tests (avoid KV call)
-      const noTestCacheKey = new Request(NO_TEST_CACHE_PREFIX + pathname);
-      const cachedNoTest = await caches.default.match(noTestCacheKey);
-      if (cachedNoTest) {
-        return fetch(request);
-      }
-
-      // Get A/B test registry (cached)
-      const registry = await getTestRegistry(env, ctx);
-      if (!registry || registry.length === 0) {
-        return fetch(request);
-      }
-
-      // Find matching test for current path
-      const matchingTest = findMatchingTest(pathname, registry);
-      if (!matchingTest) {
-        // Cache this path as having no tests using Cache API with TTL
-        const noTestResponse = new Response('no-test', {
-          headers: {
-            'Cache-Control': `max-age=${CONFIG.REGISTRY_CACHE_TTL}`,
-            'Content-Type': 'text/plain'
-          }
-        });
-        // Cache without awaiting to avoid slowing down the request
-        ctx.waitUntil(caches.default.put(noTestCacheKey, noTestResponse));
-        return fetch(request);
-      }
-
-      // Handle A/B test logic with timeout
-      return handleABTestWithTimeout(request, url, matchingTest, env);
-
-    } catch (error) {
-      logError('Worker error:', error);
+    // Skip processing for admin, REST, previews, static, non-cacheable methods, logged-in users, etc.
+    if (shouldBypassProcessing(url, request, env)) {
       return fetch(request);
     }
+
+    // Check if path is known to have no tests
+    const noTestCacheKey = new Request(NO_TEST_CACHE_PREFIX + pathname);
+    const cachedNoTest = await caches.default.match(noTestCacheKey);
+    if (cachedNoTest) {
+      return fetch(request);
+    }
+
+    // Load registry (KV -> Cache API -> memory)
+    const registry = await getTestRegistry(env, ctx);
+    if (!registry || registry.length === 0) {
+      return fetch(request);
+    }
+
+    // Find matching test for this path
+    const matchingTest = findMatchingTest(pathname, registry);
+    if (!matchingTest) {
+      // Cache a lightweight "no test" marker for this path
+      const noTestResponse = new Response('no-test', {
+        headers: {
+          'Cache-Control': `max-age=${CONFIG.REGISTRY_CACHE_TTL}`,
+          'Content-Type': 'text/plain'
+        }
+      });
+      ctx.waitUntil(caches.default.put(noTestCacheKey, noTestResponse));
+      return fetch(request);
+    }
+
+    // Handle A/B with variant-specific cache key
+    return handleABTestWithVariantCache(request, url, matchingTest, env);
   };
 
   try {
     const response = await handle();
-    // Clone headers to make them mutable
     const newHeaders = new Headers(response.headers);
     newHeaders.set('X-Worker-Duration', `${Date.now() - startTime}ms`);
-
     return new Response(response.body, {
       status: response.status,
       statusText: response.statusText,
@@ -164,44 +128,25 @@ async function handleRequest(request, env, ctx) {
 function shouldBypassProcessing(url, request, env) {
   const path = url.pathname;
 
+  // Methods not safe to cache at edge (let them go straight through)
+  if (!CONFIG.CACHE_ONLY_METHODS.has(request.method)) return true;
+
   // WordPress admin, REST API, and system paths
-  if (BYPASS_PATHS.some(prefix => path.startsWith(prefix))) {
-    return true;
-  }
+  if (BYPASS_PATHS.some(prefix => path.startsWith(prefix))) return true;
 
   // Static files - check extension using pre-compiled Set
   const lastDotIndex = path.lastIndexOf('.');
   if (lastDotIndex !== -1) {
     const extension = path.substring(lastDotIndex + 1).toLowerCase();
-    if (STATIC_EXTENSIONS.has(extension)) {
-      return true;
-    }
+    if (STATIC_EXTENSIONS.has(extension)) return true;
   }
 
-  // Logged-in users and WordPress-specific cookies
+  // Logged-in users (check cookies)
   const cookies = request.headers.get('Cookie') || '';
-  if (cookies.includes('wordpress_logged_in_') ||
-      cookies.includes('wp-postpass_') ||
-      cookies.includes('wordpress_test_cookie') ||
-      cookies.includes('comment_author_')) {
-    return true;
-  }
+  if (cookies.includes('wordpress_logged_in_')) return true;
 
-  // WordPress-specific query parameters that should bypass cache/A-B testing
-  if (url.searchParams.has('preview') ||
-      url.searchParams.has('p') ||
-      url.searchParams.has('page_id') ||
-      url.searchParams.has('s') || // search
-      url.searchParams.has('customize_theme') ||
-      url.searchParams.has('__cf_bypass_cache') ||
-      url.searchParams.has('nonitro')) {
-    return true;
-  }
-
-  // POST requests (forms, comments, etc.)
-  if (request.method !== 'GET' && request.method !== 'HEAD') {
-    return true;
-  }
+  // Debug flags
+  if (url.searchParams.has('__cf_bypass_cache') || url.searchParams.has('nonitro')) return true;
 
   // Large cookie headers
   if (cookies.length > CONFIG.MAX_COOKIE_SIZE) {
@@ -215,22 +160,19 @@ function shouldBypassProcessing(url, request, env) {
 async function getTestRegistry(env, ctx) {
   const now = Date.now();
 
-  // Check in-memory cache first (fastest)
+  // In-memory cache
   if (registryCache && (now - registryCacheTime) < (CONFIG.REGISTRY_CACHE_TTL * 1000)) {
     return registryCache;
   }
 
-  // Error boundary enhancement: circuit breaker for KV failures
+  // Circuit breaker on repeated KV failures
   if (kvFailureCount > KV_FAILURE_THRESHOLD) {
-    logWarn(env, `KV failure threshold exceeded (${kvFailureCount} failures), skipping A/B testing temporarily.`);
-    // Still check for stale cache, but don't hit KV
-    if (registryCache) {
-      return registryCache;
-    }
+    logWarn(env, `KV failure threshold exceeded (${kvFailureCount}), skipping KV temporarily`);
+    if (registryCache) return registryCache;
     return [];
   }
 
-  // Check Cache API for global consistency across instances
+  // Cache API (shared across isolates)
   const cacheKey = new Request('https://internal/ab-registry-cache-v1');
   const cache = caches.default;
 
@@ -239,7 +181,6 @@ async function getTestRegistry(env, ctx) {
     if (cachedResponse) {
       const cachedRegistry = await cachedResponse.json();
       if (Array.isArray(cachedRegistry)) {
-        // Update in-memory cache
         registryCache = cachedRegistry;
         registryCacheTime = now;
         logInfo(env, 'Registry loaded from Cache API:', cachedRegistry.length, 'tests');
@@ -251,12 +192,8 @@ async function getTestRegistry(env, ctx) {
   }
 
   try {
-    // Check KV namespace availability once
-    if (!checkKVNamespace(env)) {
-      return [];
-    }
+    if (!checkKVNamespace(env)) return [];
 
-    // Add timeout for KV operations
     const kvPromise = env.AB_TESTS_KV.get('registry', { type: 'json' });
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('KV timeout')), CONFIG.KV_TIMEOUT_MS)
@@ -265,31 +202,29 @@ async function getTestRegistry(env, ctx) {
     const registry = await Promise.race([kvPromise, timeoutPromise]);
     if (!registry || !Array.isArray(registry)) {
       logInfo(env, 'No valid registry found');
-      // Cache empty result for shorter time to avoid hammering KV
       registryCache = [];
       registryCacheTime = now;
       return [];
     }
 
     // Validate registry structure
-    const validRegistry = registry.filter(test => {
-      return test &&
-             typeof test.test === 'string' &&
-             typeof test.cookieName === 'string' &&
-             Array.isArray(test.paths) &&
-             test.paths.length > 0;
-    });
+    const validRegistry = registry.filter(test =>
+      test &&
+      typeof test.test === 'string' &&
+      typeof test.cookieName === 'string' &&
+      Array.isArray(test.paths) &&
+      test.paths.length > 0
+    );
 
     if (validRegistry.length !== registry.length) {
       logWarn(env, `Registry validation: ${registry.length - validRegistry.length} invalid entries filtered`);
     }
 
-    // Cache the successful result in both memory and Cache API with immutable copy
-    registryCache = Object.freeze(validRegistry.map(test => Object.freeze({ ...test })));
+    registryCache = Object.freeze(validRegistry.map(t => Object.freeze({ ...t })));
     registryCacheTime = now;
     logInfo(env, 'Registry loaded from KV and cached:', validRegistry.length, 'tests');
 
-    // Store in Cache API for global consistency
+    // Put into Cache API with TTL
     const cacheResponse = new Response(JSON.stringify(validRegistry), {
       headers: {
         'Cache-Control': `max-age=${CONFIG.REGISTRY_CACHE_TTL}, stale-while-revalidate=${CONFIG.REGISTRY_CACHE_TTL}`,
@@ -299,86 +234,139 @@ async function getTestRegistry(env, ctx) {
     });
     ctx.waitUntil(cache.put(cacheKey, cacheResponse));
 
-    kvFailureCount = 0; // Reset failure count on success
+    kvFailureCount = 0;
     return validRegistry;
 
   } catch (error) {
     logError('Registry fetch failed:', error);
-    kvFailureCount++; // Increment failure count
-
-    // Return cached data if available, even if stale
+    kvFailureCount++;
     if (registryCache) {
       const staleness = Math.round((now - registryCacheTime) / 1000);
       logWarn(env, `Using stale cached registry (${staleness}s old) due to fetch error`);
       return registryCache;
     }
-
     return [];
   }
 }
 
 function findMatchingTest(pathname, registry) {
-  return registry.find(test => {
-    return test.paths && Array.isArray(test.paths) && test.paths.some(path => {
+  return registry.find(test =>
+    test.paths &&
+    Array.isArray(test.paths) &&
+    test.paths.some(path => {
       if (pathname === path) return true;
       const normalizedPath = path.endsWith('/') ? path : path + '/';
       return pathname.startsWith(normalizedPath);
-    });
-  });
+    })
+  );
 }
 
-async function handleABTestWithTimeout(request, url, test, env) {
+/**
+ * Core: Variant-specific Cache API key (Option A) with HEAD safety & proper cloning
+ */
+async function handleABTestWithVariantCache(request, url, test, env) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), CONFIG.TIMEOUT_MS);
 
   try {
-    const headers = new Headers(request.headers);
-    let variant = getVariantFromRequest(request, test.cookieName);
-    let wasGenerated = false;
-
-    // Generate variant if not set
+    // 1) Sticky variant or deterministic fallback
+    let variant = getVariantFromRequest(request, test.cookieName, test.test);
     if (!variant) {
       variant = await generateVariant(request);
-      wasGenerated = true;
     }
 
-    // Add variant headers for origin (both specific and generic)
+    // 2) Build a variant-specific synthetic cache key (ALWAYS GET for Cache API)
+    const cache = caches.default;
+    const cacheKeyUrl = new URL(url.toString());
+
+    // Optional: normalize query to avoid cache fragmentation
+    if (CONFIG.STRIP_UTM_PARAMS && cacheKeyUrl.search) {
+      for (const key of Array.from(cacheKeyUrl.searchParams.keys())) {
+        if (CONFIG.UTM_PARAMS.has(key)) cacheKeyUrl.searchParams.delete(key);
+      }
+    }
+
+    // Internal parameter only for Cache API key separation
+    cacheKeyUrl.searchParams.set('__ab_variant', variant);
+
+    // IMPORTANT: Cache API keys must be GET. We still respect the client method later.
+    const getCacheKey = new Request(cacheKeyUrl.toString(), {
+      method: 'GET',
+      headers: { 'Accept': request.headers.get('Accept') || '' }
+    });
+
+    // 3) Try edge cache (GET key), even for HEAD
+    const cached = await cache.match(getCacheKey);
+    if (cached) {
+      const h = new Headers(cached.headers);
+      attachABHeaders(h, test, variant, env);
+      setABCookie(h, test.cookieName, variant);
+      h.set('X-Variant-Cache', 'hit');
+      h.set('X-Variant-Cache-Key', getCacheKey.url);
+
+      if (request.method === 'HEAD') {
+        return new Response(null, {
+          status: cached.status,
+          statusText: cached.statusText,
+          headers: h
+        });
+      }
+      return new Response(cached.body, {
+        status: cached.status,
+        statusText: cached.statusText,
+        headers: h
+      });
+    }
+
+    // 4) Cache miss → fetch from origin with variant hints.
+    const headers = new Headers(request.headers);
     headers.set('X-' + test.cookieName, variant);
     headers.set('X-AB-Variant', variant);
 
-    // Create modified request
-    const modifiedRequest = new Request(request, { headers });
+    // Forward AB cookie if origin uses it to render
+    const existingCookie = headers.get('Cookie') || '';
+    headers.set('Cookie', mergeCookie(existingCookie, `${test.cookieName}=${variant}`));
 
-    // Get response from origin with timeout
-    const response = await fetch(modifiedRequest, {
-      signal: controller.signal
-    });
+    const originReq = new Request(request, { headers });
 
-    // Create response with A/B cookie
-    const newResponse = new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers
-    });
+    // Fetch and clone so we can use the body twice
+    const originRes = await fetch(originReq, { signal: controller.signal });
 
-    // Set A/B test cookie with security flags
-    newResponse.headers.set('Set-Cookie',
-      `${test.cookieName}=${variant}; Path=/; Max-Age=${CONFIG.COOKIE_MAX_AGE}; SameSite=Lax; Secure; HttpOnly`);
+    // 5) Prepare headers for client
+    const clientHeaders = new Headers(originRes.headers);
+    attachABHeaders(clientHeaders, test, variant, env);
+    setABCookie(clientHeaders, test.cookieName, variant);
+    clientHeaders.set('X-Variant-Cache', 'miss');
+    clientHeaders.set('X-Variant-Cache-Key', getCacheKey.url);
 
-    // Add cache-aware headers - prevent WordPress from serving wrong variant
-    newResponse.headers.set('Vary', 'Cookie');
-    newResponse.headers.set('X-Worker-Active', 'true');
-    newResponse.headers.set('X-AB-Test', test.test);
-    newResponse.headers.set('X-AB-Variant', variant);
+    const isGET = request.method === 'GET';
 
-    // Debug headers for easier troubleshooting
-    if (env?.DEBUG) {
-      newResponse.headers.set('X-AB-Debug-Cookie', `${test.cookieName}=${variant}`);
-      newResponse.headers.set('X-AB-Debug-Generated', wasGenerated ? 'true' : 'false');
-      newResponse.headers.set('X-AB-Debug-Server-Side', 'true');
+    // Clone BEFORE consuming: one copy for cache, one for client
+    const resForCache = originRes.clone();
+    const resForClient = originRes; // use directly for client
+
+    // 6) Seed edge cache **only for GET** (Cache API requires GET for put)
+    if (isGET && resForCache.ok) {
+      const cacheHeaders = new Headers(clientHeaders);
+      cacheHeaders.delete('Set-Cookie'); // never cache Set-Cookie
+      cacheHeaders.set('Cache-Control', `public, s-maxage=${CONFIG.EDGE_TTL}`);
+      cacheHeaders.set('CDN-Cache-Control', `max-age=${CONFIG.EDGE_TTL}`);
+
+      const cacheableRes = new Response(resForCache.body, {
+        status: resForCache.status,
+        statusText: resForCache.statusText,
+        headers: cacheHeaders
+      });
+
+      await cache.put(getCacheKey, cacheableRes);
     }
 
-    return newResponse;
+    // 7) Return to client (body for GET, header-only for HEAD)
+    return new Response(isGET ? resForClient.body : null, {
+      status: resForClient.status,
+      statusText: resForClient.statusText,
+      headers: clientHeaders
+    });
 
   } catch (error) {
     if (error.name === 'AbortError') {
@@ -391,23 +379,62 @@ async function handleABTestWithTimeout(request, url, test, env) {
   }
 }
 
-function getVariantFromRequest(request, cookieName) {
+function attachABHeaders(h, test, variant, env) {
+  h.set('X-Worker-Active', 'true');
+  h.set('X-AB-Test', test.test);
+  h.set('X-AB-Variant', variant);
+  if (env?.DEBUG) {
+    h.set('X-AB-Debug-Server-Side', 'true');
+  }
+}
+
+function setABCookie(h, cookieName, variant) {
+  h.append(
+    'Set-Cookie',
+    `${cookieName}=${variant}; Path=/; Max-Age=${CONFIG.COOKIE_MAX_AGE}; SameSite=Lax; Secure; HttpOnly`
+  );
+}
+
+function mergeCookie(existing, addition) {
+  if (!existing) return addition;
+  const [name] = addition.split('=', 1);
+  const filtered = existing
+    .split(';')
+    .map(s => s.trim())
+    .filter(kv => kv && !kv.startsWith(name + '='));
+  filtered.push(addition);
+  return filtered.join('; ');
+}
+
+/**
+ * Forcing: via URL param matching cookieName OR test name (case-insensitive),
+ * then cookie, else null (so generator runs).
+ */
+function getVariantFromRequest(request, cookieName, altParamName) {
   const url = new URL(request.url);
 
-  // Check URL parameter first (for testing/debugging)
-  const urlVariant = url.searchParams.get(cookieName);
-  if (CONFIG.VALID_VARIANTS.includes(urlVariant)) {
-    return urlVariant;
+  // 1) URL forcing via cookieName (primary)
+  let forced = url.searchParams.get(cookieName);
+  if (CONFIG.VALID_VARIANTS.includes(forced)) return forced;
+
+  // 2) URL forcing via alternative param (e.g., test name), case-insensitive
+  if (altParamName) {
+    // exact
+    forced = url.searchParams.get(altParamName);
+    if (CONFIG.VALID_VARIANTS.includes(forced)) return forced;
+
+    // case-insensitive scan
+    for (const [k, v] of url.searchParams.entries()) {
+      if (k.toLowerCase() === String(altParamName).toLowerCase() && CONFIG.VALID_VARIANTS.includes(v)) {
+        return v;
+      }
+    }
   }
 
-  // Check cookie - more robust parsing with cached regex
+  // 3) Cookie
   const cookies = request.headers.get('Cookie') || '';
   if (cookies) {
-    // Memory optimization: Clear cookieRegexCache when it exceeds configured entries
-    if (cookieRegexCache.size > CONFIG.COOKIE_REGEX_CACHE_MAX_SIZE) {
-      cookieRegexCache.clear();
-    }
-    // Use cached regex or create and cache new one
+    if (cookieRegexCache.size > 50) cookieRegexCache.clear();
     if (!cookieRegexCache.has(cookieName)) {
       cookieRegexCache.set(cookieName, new RegExp(`(?:^|; )${cookieName}=([AB])(?:;|$)`));
     }
@@ -421,30 +448,25 @@ function getVariantFromRequest(request, cookieName) {
   return null;
 }
 
+/**
+ * Deterministic 50/50 without CF-Ray (stable across requests until cookie set)
+ */
 async function generateVariant(request) {
-  // Get user identifier components for deterministic assignment
   const ip = request.headers.get('CF-Connecting-IP') ||
-             request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim() ||
-             '127.0.0.1';
-
-  const userAgent = request.headers.get('User-Agent') || '';
-  const cfRay = request.headers.get('CF-Ray') || '';
-
-  // Create deterministic input string
-  const input = `${ip}|${userAgent.substring(0, 50)}|${cfRay}`;
+    request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim() ||
+    '127.0.0.1';
+  const userAgent = (request.headers.get('User-Agent') || '').slice(0, 80);
+  const input = `${ip}|${userAgent}`;
 
   try {
-    // Use WebCrypto SHA-256 for unbiased hash
     const encoder = new TextEncoder();
     const data = encoder.encode(input);
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = new Uint8Array(hashBuffer);
-
-    // Use first byte for 50/50 split (more mathematically sound)
-    return (hashArray[0] % 2) === 0 ? 'A' : 'B';
-  } catch (error) {
-    // Fallback to simple hash if WebCrypto fails
-    const hash = simpleHash(input);
-    return ((hash >>> 0) % 2) === 0 ? 'A' : 'B';
+    const byte0 = new Uint8Array(hashBuffer)[0];
+    return (byte0 % 2) === 0 ? 'A' : 'B';
+  } catch (_e) {
+    let h = 0;
+    for (let i = 0; i < input.length; i++) h = ((h << 5) - h) + input.charCodeAt(i) | 0;
+    return (Math.abs(h) % 2) === 0 ? 'A' : 'B';
   }
 }
