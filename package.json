@@ -8,7 +8,13 @@
     "build": "./scripts/build-plugin.sh",
     "lint:js": "eslint plugin/assets/js/",
     "lint:php": "phpcs plugin/ --standard=WordPress",
-    "format": "prettier --write plugin/assets/js/"
+    "format": "prettier --write plugin/assets/js/",
+    "test:proxy:ab": "node tests/e2e/proxy-ab-split.js",
+    "test:proxy:cache": "node tests/e2e/proxy-cache.js",
+    "test:proxy:security": "node tests/e2e/proxy-security.js",
+    "test:proxy:ga4": "node tests/e2e/proxy-ga4.js",
+    "test:proxy:all": "npm run -s test:proxy:ab && npm run -s test:proxy:cache && npm run -s test:proxy:security && npm run -s test:proxy:ga4",
+    "test:all": "node scripts/test-all.js"
   },
   "repository": {
     "type": "git",
@@ -28,6 +34,7 @@
     "@jest/globals": "^29.7.0",
     "eslint": "^8.56.0",
     "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
     "miniflare": "^3.20250718.1",
     "prettier": "^3.1.1"
   },
@@ -39,6 +46,7 @@
   },
   "dependencies": {
     "dotenv": "^17.2.1",
+    "node-fetch": "^2.7.0",
     "puppeteer": "^24.16.0"
   }
 }

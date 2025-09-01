@@ -51,7 +51,7 @@ All tests confirm the system is production-ready with:
 1. **WordPress Plugin** (`/plugin/`) - Admin interface, auto-updater, and configuration
 2. **Cloudflare Workers** (`/plugin/workers/`) - Two optimized versions for different use cases
 3. **Auto-Updater** (`/plugin/includes/plugin-updater.php`) - GitHub-based update system
-4. **Test Suite** (`/testing/`) - Comprehensive validation tools
+4. **Test Suite** (`/tests/`) - Unit (Jest + Miniflare) and E2E (proxy) tests
 5. **Build System** (`/scripts/`) - Version management and release tools
 
 ### **How It Works**
@@ -160,15 +160,17 @@ See [Auto-Updater Setup Guide](docs/auto-updater-setup.md) for complete deployme
 
 ### **Manual Testing**
 ```bash
-# Test algorithm distribution
-cd testing/
-node test-ab-complete.js
+# Unit & integration (Jest)
+npm test
 
-# Test cache worker performance  
-node test-cache-worker.js
+# Run all E2E proxy tests
+npm run test:proxy:all
 
-# Build and test locally
-./scripts/build-plugin.sh
+# Or run specific E2E tests
+npm run test:proxy:ab
+npm run test:proxy:cache
+npm run test:proxy:security
+npm run test:proxy:ga4
 ```
 
 ### **Version Management**
@@ -204,7 +206,9 @@ cloudflare-ab-testing/
 ├── docs/                     # Documentation
 │   ├── auto-updater-setup.md
 │   └── installation.md
-├── testing/                  # Test and validation tools
+├── tests/                    # Unified test suite (unit + e2e)
+│   ├── unit/                 # Jest + Miniflare
+│   └── e2e/                  # Proxy-based live tests
 └── releases/                 # Built plugin releases
 ```
 
@@ -233,7 +237,7 @@ chmod +x scripts/*.sh
 - [Installation Guide](docs/installation.md)
 - [Auto-Updater Setup](docs/auto-updater-setup.md)
 - [Worker Documentation](plugin/workers/README.md)
-- [Testing Guide](testing/README.md)
+- [Testing Guide](tests/README.md)
 
 ## 🤝 Contributing
 

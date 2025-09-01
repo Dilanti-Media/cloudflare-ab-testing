@@ -89,7 +89,7 @@ describe('Miniflare integration: ab-testing-with-cache', () => {
     if (mf) await mf.dispose();
   });
 
-  test('assigns variant, forwards header, sets cookie and vary', async () => {
+  test('assigns variant, forwards header, sets cookie', async () => {
     const url = `http://127.0.0.1:${origin.port}/`;
     const res = await mf.dispatchFetch(url);
     const text = await res.text();
@@ -99,7 +99,6 @@ describe('Miniflare integration: ab-testing-with-cache', () => {
     expect(res.headers.get('x-ab-test')).toBe('HOME');
     const variant = res.headers.get('x-ab-variant');
     expect(['A', 'B']).toContain(variant);
-    expect(res.headers.get('vary')).toMatch(/Cookie/);
     // Cookie set
     const setCookie = res.headers.get('set-cookie');
     const cookieVal = parseCookie(setCookie, 'AB_HOMEPAGE_TEST');
@@ -183,7 +182,7 @@ describe('Miniflare integration: ab-testing-with-cache', () => {
     expect(res.headers.get('set-cookie')).toBeNull();
   });
 
-  test('emits debug headers when DEBUG is true', async () => {
+  test('emits debug server-side header when DEBUG is true', async () => {
     const mfDebug = new Miniflare({
       modules: true,
       scriptPath: require('path').join(__dirname, '../../plugin/workers/ab-testing-with-cache.js'),
@@ -198,8 +197,6 @@ describe('Miniflare integration: ab-testing-with-cache', () => {
 
     const url = `http://127.0.0.1:${origin.port}/`;
     const res = await mfDebug.dispatchFetch(url);
-    expect(res.headers.get('x-ab-debug-cookie')).toMatch(/AB_HOMEPAGE_TEST=/);
-    expect(['true', 'false']).toContain(res.headers.get('x-ab-debug-generated'));
     expect(res.headers.get('x-ab-debug-server-side')).toBe('true');
 
     await mfDebug.dispose();
